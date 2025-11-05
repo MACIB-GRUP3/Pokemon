@@ -62,57 +62,58 @@ pipeline {
         }
 
         stage('Deploy for DAST') {
-            steps {
-                script {
-                    sh '''
-                        echo "=== Iniciant servidor PHP ==="
+    steps {
+        script {
+            sh '''
+                echo "=== Desplegant aplicació PHP per a DAST ==="
 
-                        # Aturar servidor PHP anterior
-                        pkill -f "php -S" || true
+                docker network create zapnet || true
 
-                        # Iniciar servidor PHP
-                        nohup php -S 0.0.0.0:${APP_PORT} -t . > php-server.log 2>&1 &
-                        echo $! > php-server.pid
+                # Aturar contenidor antic
+                docker stop php-pokemon || true
+                docker rm php-pokemon || true
 
-                        # Esperar a que el servidor estigui llest
-                        sleep 5
+                # Executar servidor PHP dins contenidor
+                docker run -d --name php-pokemon --network zapnet \
+                    -v ${WORKSPACE}:/var/www/html \
+                    -w /var/www/html \
+                    -p ${APP_PORT}:8888 \
+                    php:8.2-cli \
+                    php -S 0.0.0.0:8888 -t .
 
-                        # Verificar funcionament
-                        curl -I http://localhost:${APP_PORT} || echo "Servidor PHP iniciat correctament"
-                    '''
-                }
-            }
+                echo "Esperant que el servidor PHP estigui llest..."
+                sleep 5
+                docker exec php-pokemon curl -I http://localhost:8888 || echo "Servidor PHP iniciat correctament"
+            '''
         }
+    }
+}
 
-       stage('DAST - OWASP ZAP Scan') {
-            steps {
-                script {
-                    sh '''
-                        echo "=== Iniciant escaneig amb OWASP ZAP ==="
+stage('DAST - OWASP ZAP Scan') {
+    steps {
+        script {
+            sh '''
+                echo "=== Iniciant escaneig amb OWASP ZAP ==="
 
-                        docker stop zap-pokemon || true
-                        docker rm zap-pokemon || true
-                        mkdir -p /var/jenkins_home/workspace/pokemon-php-cicd/zap-reports
-                        chmod -R 777 /var/jenkins_home/workspace/pokemon-php-cicd/zap-reports
+                docker stop zap-pokemon || true
+                docker rm zap-pokemon || true
+                mkdir -p ${WORKSPACE}/zap-reports
+                chmod -R 777 ${WORKSPACE}/zap-reports
 
-                        # Assegurar que el servidor PHP està actiu
-                        echo "Comprovant servidor PHP..."
-                        curl -I http://127.0.0.1:${APP_PORT} || (echo "⚠️  El servidor PHP no respon" && exit 1)
+                # Descarregar imatge ZAP si no existeix
+                if ! docker image inspect ghcr.io/zaproxy/zaproxy:weekly >/dev/null 2>&1; then
+                    docker pull ghcr.io/zaproxy/zaproxy:weekly
+                fi
 
-                        # Descarregar imatge ZAP si no existeix
-                        if ! docker image inspect ghcr.io/zaproxy/zaproxy:weekly >/dev/null 2>&1; then
-                        docker pull ghcr.io/zaproxy/zaproxy:weekly
-                        fi
-
-                        # Executar ZAP amb permisos d'escriptura i xarxa host
-                        docker run --user root --name zap-pokemon --network host \
-                        -v /var/jenkins_home/workspace/pokemon-php-cicd/zap-reports:/zap/wrk:rw \
-                        -t ghcr.io/zaproxy/zaproxy:weekly \
-                        zap-baseline.py -t http://localhost:${APP_PORT} -r zap_report.html -I
-                    '''
-                }
-            }
+                # Executar ZAP dins la mateixa xarxa que PHP
+                docker run --user root --name zap-pokemon --network zapnet \
+                    -v ${WORKSPACE}/zap-reports:/zap/wrk:rw \
+                    -t ghcr.io/zaproxy/zaproxy:weekly \
+                    zap-baseline.py -t http://php-pokemon:8888 -r zap_report.html -I
+            '''
         }
+    }
+}
 
 
         stage('Security Analysis - PHP Specific') {
