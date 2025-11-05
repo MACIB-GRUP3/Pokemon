@@ -95,14 +95,7 @@ pipeline {
                         mkdir -p ${WORKSPACE}/zap-reports
                         
                         # Ejecutar ZAP baseline scan (más rápido para PHP)
-                        docker run --name zap-pokemon \
-                            --network host \
-                            -v ${WORKSPACE}/zap-reports:/zap/wrk:rw \
-                            -t owasp/zap2docker-stable \
-                            zap-baseline.py \
-                            -t http://localhost:${APP_PORT} \
-                            -r zap_report.html \
-                            -I
+                        docker run --name zap-pokemon --network host -v /var/jenkins_home/workspace/pokemon-php-cicd/zap-reports:/zap/wrk:rw -t owasp/zap2docker-weekly zap-baseline.py -t http://localhost:8888 -r zap_report.html -I
                     '''
                     
                     // Para un escaneo más completo (toma más tiempo)
