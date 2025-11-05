@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg" href="/img/pokedex.png"/>
+    <link
+      rel="stylesheet"
+      href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css"
+      integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm"
+      crossorigin="anonymous"
+    />
+    <link rel="stylesheet" href="/css/Navbar.css" />
+    <link rel="stylesheet" href="/css/Home.css" />
+    <title>Pokédex</title>
+  </head>
+  <body>
+    <div class="Navbar">
+      <div class="container-fluid">
+        <a class="Navbar__brand" href="#">
+          <img
+            class="Navbar__brand-logo"
+            src="/img/successball.svg"
+            alt="Logo"
+          />
+          <span class="font-weight-light">Poké</span>
+          <span class="font-weight-bold">dex</span>
+          </div>
+        </a>
+        <div>
+          
+        </div>
+      </div>
+    </div>
+    <div class="Home__container d-flex justify-content-center">
+        <div class="d-flex flex-column">
+            <img src="/img/successball.svg" alt="" width="380">
+            <div class="text-center">
+                <span class="Home__title font-weight-light">Captured!</span>
+              <p class="Home__subtitle font-weight-light">
+                Pokémon added to your Pokédex.
+              </p>
+                  <a href="javascript:window.location.assign('main.php')" class="Home__button btn btn-success font-weight-bold">
+                    Search more
+                </a>
+                <a href="javascript:window.location.assign('profile.php')" class="Home__button btn btn-primary font-weight-bold">
+                    Your profile
+                </a>
+            </div>
+        </div>
+      </div>
+  </body>
+</html>
