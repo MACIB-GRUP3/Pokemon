@@ -84,7 +84,7 @@ pipeline {
             }
         }
 
-        stage('DAST - OWASP ZAP Scan') {
+       stage('DAST - OWASP ZAP Scan') {
             steps {
                 script {
                     sh '''
@@ -93,32 +93,27 @@ pipeline {
                         docker stop zap-pokemon || true
                         docker rm zap-pokemon || true
                         mkdir -p /var/jenkins_home/workspace/pokemon-php-cicd/zap-reports
+                        chmod -R 777 /var/jenkins_home/workspace/pokemon-php-cicd/zap-reports
 
-                        # Verificar si la imatge ja està disponible
+                        # Assegurar que el servidor PHP està actiu
+                        echo "Comprovant servidor PHP..."
+                        curl -I http://127.0.0.1:${APP_PORT} || (echo "⚠️  El servidor PHP no respon" && exit 1)
+
+                        # Descarregar imatge ZAP si no existeix
                         if ! docker image inspect ghcr.io/zaproxy/zaproxy:weekly >/dev/null 2>&1; then
-                            echo "Descarregant imatge OWASP ZAP..."
-                            docker pull ghcr.io/zaproxy/zaproxy:weekly
+                        docker pull ghcr.io/zaproxy/zaproxy:weekly
                         fi
 
-                        # Executar escaneig bàsic
-                        docker run --name zap-pokemon --network host \
-                            -v /var/jenkins_home/workspace/pokemon-php-cicd/zap-reports:/zap/wrk:rw \
-                            -t ghcr.io/zaproxy/zaproxy:weekly \
-                            zap-baseline.py -t http://localhost:${APP_PORT} -r zap_report.html -I
-
-                        # (Opcional) Escaneig complet:
-                        # docker run --name zap-full-pokemon \
-                        #     --network host \
-                        #     -v ${WORKSPACE}/zap-reports:/zap/wrk:rw \
-                        #     -t ghcr.io/zaproxy/zaproxy:weekly \
-                        #     zap-full-scan.py \
-                        #     -t http://localhost:${APP_PORT} \
-                        #     -r zap_full_report.html \
-                        #     -I
+                        # Executar ZAP amb permisos d'escriptura i xarxa host
+                        docker run --user root --name zap-pokemon --network host \
+                        -v /var/jenkins_home/workspace/pokemon-php-cicd/zap-reports:/zap/wrk:rw \
+                        -t ghcr.io/zaproxy/zaproxy:weekly \
+                        zap-baseline.py -t http://localhost:${APP_PORT} -r zap_report.html -I
                     '''
                 }
             }
         }
+
 
         stage('Security Analysis - PHP Specific') {
             steps {
