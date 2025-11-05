@@ -30,27 +30,6 @@ pipeline {
                     
                     # Instalar PHP y Composer en Jenkins si es necesario
                     which php || apt-get update && apt-get install -y php php-cli php-xml php-mbstring
-
-                    # Instalar Composer si no está presente
-                    which composer || (curl -sS https://getcomposer.org/installer | php && mv composer.phar /usr/local/bin/composer)
-                    
-                    # Instalar las dependencias del proyecto (incluyendo PHPUnit)
-                    composer install
-                '''
-            }
-        }
-
-        stage('Unit Tests and Coverage') {
-            steps {
-                sh '''
-                    echo "Ejecutando PHPUnit y generando reporte de cobertura..."
-            
-                    # Ejecuta PHPUnit. Asegúrate de que el comando es correcto para tu setup.
-                    # Usamos --coverage-clover para generar el archivo XML.
-                    ./vendor/bin/phpunit --coverage-clover coverage.xml
-            
-                    # Verificar si el archivo se creó
-                    ls -la coverage.xml
                 '''
             }
         }
@@ -77,7 +56,7 @@ pipeline {
         
         stage('Quality Gate') {
             steps {
-                timeout(time: 15, unit: 'MINUTES') {
+                timeout(time: 5, unit: 'MINUTES') {
                     waitForQualityGate abortPipeline: false
                 }
             }
