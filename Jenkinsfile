@@ -30,6 +30,12 @@ pipeline {
                     
                     # Instalar PHP y Composer en Jenkins si es necesario
                     which php || apt-get update && apt-get install -y php php-cli php-xml php-mbstring
+
+                    # Instalar Composer si no está presente
+                    which composer || (curl -sS https://getcomposer.org/installer | php && mv composer.phar /usr/local/bin/composer)
+                    
+                    # Instalar las dependencias del proyecto (incluyendo PHPUnit)
+                    composer install
                 '''
             }
         }
