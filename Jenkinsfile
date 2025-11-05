@@ -1,6 +1,6 @@
 pipeline {
     agent any
-    
+
     environment {
         GIT_REPO = 'https://github.com/MACIB-GRUP3/Pokemon.git'
         SONAR_PROJECT_KEY = 'pokemon-php'
@@ -8,32 +8,31 @@ pipeline {
         APP_PORT = '8888'
         ZAP_PORT = '8090'
     }
-    
+
     triggers {
         pollSCM('H/5 * * * *')
     }
-    
+
     stages {
         stage('Checkout') {
             steps {
-                git branch: 'main', 
+                git branch: 'main',
                     url: "${GIT_REPO}"
             }
         }
-        
+
         stage('Prepare Environment') {
             steps {
                 sh '''
-                    # Verificar estructura del proyecto
-                    echo "Contenido del repositorio:"
+                    echo "=== Verificant estructura del projecte ==="
                     ls -la
-                    
-                    # Instalar PHP y Composer en Jenkins si es necesario
-                    which php || apt-get update && apt-get install -y php php-cli php-xml php-mbstring
+
+                    echo "=== Instal·lant PHP i Composer si cal ==="
+                    which php || (apt-get update && apt-get install -y php php-cli php-xml php-mbstring curl)
                 '''
             }
         }
-        
+
         stage('SAST - SonarQube Analysis') {
             steps {
                 script {
@@ -53,7 +52,7 @@ pipeline {
                 }
             }
         }
-        
+
         stage('Quality Gate') {
             steps {
                 timeout(time: 5, unit: 'MINUTES') {
@@ -61,50 +60,57 @@ pipeline {
                 }
             }
         }
-        
+
         stage('Deploy for DAST') {
             steps {
                 script {
                     sh '''
-                        # Detener servidor PHP anterior si existe
+                        echo "=== Iniciant servidor PHP ==="
+
+                        # Aturar servidor PHP anterior
                         pkill -f "php -S" || true
-                        
+
                         # Iniciar servidor PHP
                         nohup php -S 0.0.0.0:${APP_PORT} -t . > php-server.log 2>&1 &
                         echo $! > php-server.pid
-                        
-                        # Esperar a que el servidor esté listo
+
+                        # Esperar a que el servidor estigui llest
                         sleep 5
-                        
-                        # Verificar que está funcionando
-                        curl -I http://localhost:${APP_PORT} || echo "Servidor PHP iniciado"
+
+                        # Verificar funcionament
+                        curl -I http://localhost:${APP_PORT} || echo "Servidor PHP iniciat correctament"
                     '''
                 }
             }
         }
-        
+
         stage('DAST - OWASP ZAP Scan') {
             steps {
                 script {
                     sh '''
+                        echo "=== Iniciant escaneig amb OWASP ZAP ==="
+
                         docker stop zap-pokemon || true
                         docker rm zap-pokemon || true
                         mkdir -p /var/jenkins_home/workspace/pokemon-php-cicd/zap-reports
 
-                        # 1. INTENTO DE DESCARGA EXPLÍCITA (usando weekly)
-                        docker pull owasp/zap2docker-weekly || echo "Fallo al pre-descargar ZAP, intentando la ejecución..."
+                        # Verificar si la imatge ja està disponible
+                        if ! docker image inspect ghcr.io/zaproxy/zaproxy:weekly >/dev/null 2>&1; then
+                            echo "Descarregant imatge OWASP ZAP..."
+                            docker pull ghcr.io/zaproxy/zaproxy:weekly
+                        fi
 
-                        # 2. EJECUCIÓN DEL ESCANEO (debe ser owasp/zap2docker-weekly si la descarga funciona)
-                        docker run --name zap-pokemon --network host -v /var/jenkins_home/workspace/pokemon-php-cicd/zap-reports:/zap/wrk:rw -t owasp/zap2docker-weekly zap-baseline.py -t http://localhost:${APP_PORT} -r zap_report.html -I
-                        '''
-                    
-                    // Para un escaneo más completo (toma más tiempo)
-                    sh '''
-                        # Full scan (opcional - descomentar si se necesita)
+                        # Executar escaneig bàsic
+                        docker run --name zap-pokemon --network host \
+                            -v /var/jenkins_home/workspace/pokemon-php-cicd/zap-reports:/zap/wrk:rw \
+                            -t ghcr.io/zaproxy/zaproxy:weekly \
+                            zap-baseline.py -t http://localhost:${APP_PORT} -r zap_report.html -I
+
+                        # (Opcional) Escaneig complet:
                         # docker run --name zap-full-pokemon \
                         #     --network host \
                         #     -v ${WORKSPACE}/zap-reports:/zap/wrk:rw \
-                        #     -t owasp/zap2docker-stable \
+                        #     -t ghcr.io/zaproxy/zaproxy:weekly \
                         #     zap-full-scan.py \
                         #     -t http://localhost:${APP_PORT} \
                         #     -r zap_full_report.html \
@@ -113,31 +119,29 @@ pipeline {
                 }
             }
         }
-        
+
         stage('Security Analysis - PHP Specific') {
             steps {
                 script {
-                    // Análisis adicional de seguridad para PHP
                     sh '''
-                        # Buscar patrones inseguros comunes en PHP
-                        echo "=== Análisis de Seguridad PHP ==="
-                        
-                        # Buscar posibles SQL Injections
-                        grep -r "mysql_query\\|mysqli_query" . --include="*.php" | grep -v "prepare" || echo "No se encontraron queries sin preparar"
-                        
-                        # Buscar posibles XSS
-                        grep -r "echo \\$_GET\\|echo \\$_POST\\|print \\$_GET\\|print \\$_POST" . --include="*.php" || echo "No se encontraron outputs directos sin escape"
-                        
-                        # Buscar inclusiones peligrosas
-                        grep -r "include\\|require" . --include="*.php" | grep "\\$_GET\\|\\$_POST" || echo "No se encontraron inclusiones dinámicas peligrosas"
-                        
-                        # Buscar funciones peligrosas
-                        grep -r "eval\\|exec\\|system\\|shell_exec\\|passthru" . --include="*.php" || echo "No se encontraron funciones peligrosas"
+                        echo "=== Anàlisi de seguretat específica per PHP ==="
+
+                        echo "-- Buscant SQL injections --"
+                        grep -r "mysql_query\\|mysqli_query" . --include="*.php" | grep -v "prepare" || echo "✅ No s'han trobat consultes sense preparar"
+
+                        echo "-- Buscant XSS --"
+                        grep -r "echo \\$_GET\\|echo \\$_POST\\|print \\$_GET\\|print \\$_POST" . --include="*.php" || echo "✅ No s'han trobat sortides directes sense escapament"
+
+                        echo "-- Buscant inclusions perilloses --"
+                        grep -r "include\\|require" . --include="*.php" | grep "\\$_GET\\|\\$_POST" || echo "✅ No s'han trobat inclusions dinàmiques perilloses"
+
+                        echo "-- Buscant funcions perilloses --"
+                        grep -r "eval\\|exec\\|system\\|shell_exec\\|passthru" . --include="*.php" || echo "✅ No s'han trobat funcions perilloses"
                     '''
                 }
             }
         }
-        
+
         stage('Publish Reports') {
             steps {
                 publishHTML([
@@ -148,25 +152,25 @@ pipeline {
                     reportFiles: 'zap_report.html',
                     reportName: 'OWASP ZAP Security Report'
                 ])
-                
+
                 archiveArtifacts artifacts: 'zap-reports/**/*', allowEmptyArchive: true
             }
         }
     }
-    
+
     post {
         always {
             script {
-                // Limpiar recursos
                 sh '''
-                    # Detener servidor PHP
+                    echo "=== Netejant recursos ==="
+                    # Aturar servidor PHP
                     if [ -f php-server.pid ]; then
                         kill $(cat php-server.pid) || true
                         rm php-server.pid
                     fi
                     pkill -f "php -S" || true
-                    
-                    # Limpiar contenedores Docker
+
+                    # Netejar contenidors Docker
                     docker stop zap-pokemon || true
                     docker rm zap-pokemon || true
                 '''
@@ -174,14 +178,14 @@ pipeline {
         }
         success {
             echo """
-            ✅ Pipeline completado exitosamente!
-            📊 Revisa los reportes de:
+            ✅ Pipeline completat correctament!
+            📊 Consulta els informes a:
             - SonarQube: http://[IP-VM]:9000
-            - ZAP Report: En los artefactos de Jenkins
+            - OWASP ZAP: Arxius d'artefactes de Jenkins
             """
         }
         failure {
-            echo '❌ El pipeline ha fallado. Revisa los logs para más detalles.'
+            echo '❌ El pipeline ha fallat. Revisa els logs per més detalls.'
         }
     }
 }
