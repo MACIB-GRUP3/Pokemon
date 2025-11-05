@@ -1,0 +1,82 @@
+body {
+  background-color: #aeaeae;
+}
+
+.Main__hero {
+  width: 100%;
+  padding: 1rem 0;
+  background-color: #aeaeae;
+  background-repeat: repeat;
+  margin-bottom: 1rem;
+  color: white;
+}
+
+.Hero__container {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  flex-direction: row;
+  align-items: center;
+}
+
+.Hero__container img {
+  width: 80px;
+  margin-right: 10px;
+  margin-left: 10px;
+}
+
+.row ul {
+  list-style-type: none;
+}
+
+.Cards {
+  width: 99%;
+}
+
+.Pokemons__container {
+  width: 100%;
+  max-width: 580px;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
+.Badges__buttons {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 1rem;
+}
+
+.PokeCard {
+  background-color: white;
+  box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.3);
+  transition: 0.3s;
+  width: 10%;
+  border-radius: 5px;
+  margin-bottom: 30px;
+  margin-left: 80px;
+  color: white;
+}
+
+.PokeCard:hover {
+  box-shadow: 0 16px 32px 0 rgba(0, 0, 0, 0.8);
+  cursor: pointer;
+}
+
+.PokeCard h3 {
+  font-family: sans-serif;
+  font-size: large;
+  font-weight: lighter;
+  padding-top: 10px;
+}
+
+.PokeCard__container {
+  display: flex;
+  justify-content: center;
+  background-color: #e88d67;
+}
+
+.gif {
+  height: 400px;
+  width: 400px;
+  margin-left: 45%;
+}

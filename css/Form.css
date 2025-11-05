@@ -1,0 +1,12 @@
+.Form__container {
+  background-color: #aeaeae;
+  width: 100%;
+  height: 100%;
+  position: fixed;
+  padding: 20px;
+  color: white;
+}
+
+.Form__img {
+  width: 100%;
+}
