@@ -87,16 +87,16 @@ pipeline {
             steps {
                 script {
                     sh '''
-                        # Limpiar contenedores anteriores
                         docker stop zap-pokemon || true
                         docker rm zap-pokemon || true
-                        
-                        # Crear directorio para reportes
-                        mkdir -p ${WORKSPACE}/zap-reports
-                        
-                        # Ejecutar ZAP baseline scan (más rápido para PHP)
-                        docker run --name zap-pokemon --network host -v /var/jenkins_home/workspace/pokemon-php-cicd/zap-reports:/zap/wrk:rw -t owasp/zap2docker-weekly zap-baseline.py -t http://localhost:8888 -r zap_report.html -I
-                    '''
+                        mkdir -p /var/jenkins_home/workspace/pokemon-php-cicd/zap-reports
+
+                        # 1. INTENTO DE DESCARGA EXPLÍCITA (usando weekly)
+                        docker pull owasp/zap2docker-weekly || echo "Fallo al pre-descargar ZAP, intentando la ejecución..."
+
+                        # 2. EJECUCIÓN DEL ESCANEO (debe ser owasp/zap2docker-weekly si la descarga funciona)
+                        docker run --name zap-pokemon --network host -v /var/jenkins_home/workspace/pokemon-php-cicd/zap-reports:/zap/wrk:rw -t owasp/zap2docker-weekly zap-baseline.py -t http://localhost:${APP_PORT} -r zap_report.html -I
+                        '''
                     
                     // Para un escaneo más completo (toma más tiempo)
                     sh '''
