@@ -184,6 +184,8 @@ stage('DAST - OWASP ZAP Scan') {
                 '''
             }
         }
+    }
+        
         success {
             echo """
             ✅ Pipeline completat correctament!
