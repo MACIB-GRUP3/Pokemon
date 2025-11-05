@@ -16,8 +16,7 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                git branch: 'main',
-                    url: "${GIT_REPO}"
+                git branch: 'main', url: "${GIT_REPO}"
             }
         }
 
@@ -62,59 +61,54 @@ pipeline {
         }
 
         stage('Deploy for DAST') {
-    steps {
-        script {
-            sh '''
-                echo "=== Desplegant aplicació PHP per a DAST ==="
+            steps {
+                script {
+                    sh '''
+                        echo "=== Desplegant aplicació PHP per a DAST ==="
 
-                docker network create zapnet || true
+                        docker network create zapnet || true
 
-                # Aturar contenidor antic
-                docker stop php-pokemon || true
-                docker rm php-pokemon || true
+                        docker stop php-pokemon || true
+                        docker rm php-pokemon || true
 
-                # Executar servidor PHP dins contenidor
-                docker run -d --name php-pokemon --network zapnet \
-                    -v ${WORKSPACE}:/var/www/html \
-                    -w /var/www/html \
-                    -p ${APP_PORT}:8888 \
-                    php:8.2-cli \
-                    php -S 0.0.0.0:8888 -t .
+                        docker run -d --name php-pokemon --network zapnet \
+                            -v ${WORKSPACE}:/var/www/html \
+                            -w /var/www/html \
+                            -p ${APP_PORT}:8888 \
+                            php:8.2-cli \
+                            php -S 0.0.0.0:8888 -t .
 
-                echo "Esperant que el servidor PHP estigui llest..."
-                sleep 5
-                docker exec php-pokemon curl -I http://localhost:8888 || echo "Servidor PHP iniciat correctament"
-            '''
+                        echo "Esperant que el servidor PHP estigui llest..."
+                        sleep 5
+                        docker exec php-pokemon curl -I http://localhost:8888 || echo "Servidor PHP iniciat correctament"
+                    '''
+                }
+            }
         }
-    }
-}
 
-stage('DAST - OWASP ZAP Scan') {
-    steps {
-        script {
-            sh '''
-                echo "=== Iniciant escaneig amb OWASP ZAP ==="
+        stage('DAST - OWASP ZAP Scan') {
+            steps {
+                script {
+                    sh '''
+                        echo "=== Iniciant escaneig amb OWASP ZAP ==="
 
-                docker stop zap-pokemon || true
-                docker rm zap-pokemon || true
-                mkdir -p ${WORKSPACE}/zap-reports
-                chmod -R 777 ${WORKSPACE}/zap-reports
+                        docker stop zap-pokemon || true
+                        docker rm zap-pokemon || true
+                        mkdir -p ${WORKSPACE}/zap-reports
+                        chmod -R 777 ${WORKSPACE}/zap-reports
 
-                # Descarregar imatge ZAP si no existeix
-                if ! docker image inspect ghcr.io/zaproxy/zaproxy:weekly >/dev/null 2>&1; then
-                    docker pull ghcr.io/zaproxy/zaproxy:weekly
-                fi
+                        if ! docker image inspect ghcr.io/zaproxy/zaproxy:weekly >/dev/null 2>&1; then
+                            docker pull ghcr.io/zaproxy/zaproxy:weekly
+                        fi
 
-                # Executar ZAP dins la mateixa xarxa que PHP
-                docker run --user root --name zap-pokemon --network zapnet \
-                    -v ${WORKSPACE}/zap-reports:/zap/wrk:rw \
-                    -t ghcr.io/zaproxy/zaproxy:weekly \
-                    zap-baseline.py -t http://php-pokemon:8888 -r zap_report.html -I
-            '''
+                        docker run --user root --name zap-pokemon --network zapnet \
+                            -v ${WORKSPACE}/zap-reports:/zap/wrk:rw \
+                            -t ghcr.io/zaproxy/zaproxy:weekly \
+                            zap-baseline.py -t http://php-pokemon:8888 -r zap_report.html -I
+                    '''
+                }
+            }
         }
-    }
-}
-
 
         stage('Security Analysis - PHP Specific') {
             steps {
@@ -138,54 +132,49 @@ stage('DAST - OWASP ZAP Scan') {
             }
         }
 
-       stage('Publish Reports') {
-    steps {
-        script {
-            sh '''
-                echo "=== Verificant informes ZAP ==="
-                mkdir -p ${WORKSPACE}/zap-reports
-                chmod -R 777 ${WORKSPACE}/zap-reports
+        stage('Publish Reports') {
+            steps {
+                script {
+                    sh '''
+                        echo "=== Verificant informes ZAP ==="
+                        mkdir -p ${WORKSPACE}/zap-reports
+                        chmod -R 777 ${WORKSPACE}/zap-reports
 
-                if [ ! -f ${WORKSPACE}/zap-reports/zap_report.html ]; then
-                    echo "⚠️ No s'ha trobat zap_report.html, creant placeholder..."
-                    echo "<html><body><h2>No s'ha generat l'informe de ZAP.</h2></body></html>" > ${WORKSPACE}/zap-reports/zap_report.html
-                fi
-            '''
+                        if [ ! -f ${WORKSPACE}/zap-reports/zap_report.html ]; then
+                            echo "⚠️ No s'ha trobat zap_report.html, creant placeholder..."
+                            echo "<html><body><h2>No s'ha generat l'informe de ZAP.</h2></body></html>" > ${WORKSPACE}/zap-reports/zap_report.html
+                        fi
+                    '''
 
-            publishHTML([
-                allowMissing: true,
-                alwaysLinkToLastBuild: true,
-                keepAll: true,
-                reportDir: 'zap-reports',
-                reportFiles: 'zap_report.html',
-                reportName: 'OWASP ZAP Security Report'
-            ])
+                    publishHTML([
+                        allowMissing: true,
+                        alwaysLinkToLastBuild: true,
+                        keepAll: true,
+                        reportDir: 'zap-reports',
+                        reportFiles: 'zap_report.html',
+                        reportName: 'OWASP ZAP Security Report'
+                    ])
 
-            archiveArtifacts artifacts: 'zap-reports/**/*', allowEmptyArchive: true
+                    archiveArtifacts artifacts: 'zap-reports/**/*', allowEmptyArchive: true
+                }
+            }
         }
     }
-}
 
     post {
         always {
             script {
                 sh '''
                     echo "=== Netejant recursos ==="
-                    # Aturar servidor PHP
-                    if [ -f php-server.pid ]; then
-                        kill $(cat php-server.pid) || true
-                        rm php-server.pid
-                    fi
-                    pkill -f "php -S" || true
-
-                    # Netejar contenidors Docker
+                    docker stop php-pokemon || true
+                    docker rm php-pokemon || true
                     docker stop zap-pokemon || true
                     docker rm zap-pokemon || true
+                    docker network rm zapnet || true
                 '''
             }
         }
-    }
-        
+
         success {
             echo """
             ✅ Pipeline completat correctament!
@@ -194,6 +183,7 @@ stage('DAST - OWASP ZAP Scan') {
             - OWASP ZAP: Arxius d'artefactes de Jenkins
             """
         }
+
         failure {
             echo '❌ El pipeline ha fallat. Revisa els logs per més detalls.'
         }
