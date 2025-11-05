@@ -2,7 +2,7 @@ pipeline {
     agent any
     
     environment {
-        GIT_REPO = 'https://github.com/marc-mora/pokemon.git'
+        GIT_REPO = 'https://github.com/MACIB-GRUP3/Pokemon.git'
         SONAR_PROJECT_KEY = 'pokemon-php'
         SONAR_PROJECT_NAME = 'Pokemon PHP App'
         APP_PORT = '8888'
