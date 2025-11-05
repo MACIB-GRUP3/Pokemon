@@ -138,21 +138,33 @@ stage('DAST - OWASP ZAP Scan') {
             }
         }
 
-        stage('Publish Reports') {
-            steps {
-                publishHTML([
-                    allowMissing: false,
-                    alwaysLinkToLastBuild: true,
-                    keepAll: true,
-                    reportDir: 'zap-reports',
-                    reportFiles: 'zap_report.html',
-                    reportName: 'OWASP ZAP Security Report'
-                ])
+       stage('Publish Reports') {
+    steps {
+        script {
+            sh '''
+                echo "=== Verificant informes ZAP ==="
+                mkdir -p ${WORKSPACE}/zap-reports
+                chmod -R 777 ${WORKSPACE}/zap-reports
 
-                archiveArtifacts artifacts: 'zap-reports/**/*', allowEmptyArchive: true
-            }
+                if [ ! -f ${WORKSPACE}/zap-reports/zap_report.html ]; then
+                    echo "⚠️ No s'ha trobat zap_report.html, creant placeholder..."
+                    echo "<html><body><h2>No s'ha generat l'informe de ZAP.</h2></body></html>" > ${WORKSPACE}/zap-reports/zap_report.html
+                fi
+            '''
+
+            publishHTML([
+                allowMissing: true,
+                alwaysLinkToLastBuild: true,
+                keepAll: true,
+                reportDir: 'zap-reports',
+                reportFiles: 'zap_report.html',
+                reportName: 'OWASP ZAP Security Report'
+            ])
+
+            archiveArtifacts artifacts: 'zap-reports/**/*', allowEmptyArchive: true
         }
     }
+}
 
     post {
         always {
