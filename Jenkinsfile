@@ -39,6 +39,21 @@ pipeline {
                 '''
             }
         }
+
+        stage('Unit Tests and Coverage') {
+            steps {
+                sh '''
+                    echo "Ejecutando PHPUnit y generando reporte de cobertura..."
+            
+                    # Ejecuta PHPUnit. Asegúrate de que el comando es correcto para tu setup.
+                    # Usamos --coverage-clover para generar el archivo XML.
+                    ./vendor/bin/phpunit --coverage-clover coverage.xml
+            
+                    # Verificar si el archivo se creó
+                    ls -la coverage.xml
+                '''
+            }
+        }
         
         stage('SAST - SonarQube Analysis') {
             steps {
