@@ -17,8 +17,7 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                // 1. 🚨 SOLUCIÓN AL ERROR SSL/TLS: Forzar a Git a usar OpenSSL en lugar de GnuTLS
-                sh 'git config --global http.sslBackend "openssl"'
+                sh 'git config --global http.sslVerify false'
                 git branch: 'main', url: "${GIT_REPO}"
             }
         }
@@ -26,10 +25,6 @@ pipeline {
         stage('Prepare Environment') {
             steps {
                 sh '''
-                    echo "=== Instal·lant dependències del sistema (Dins del contenidor Jenkins) ==="
-                    
-                    # Comandos de instalación para Debian/Ubuntu.
-                    # Assegurem que les dependències clau estiguin instal·lades per executar PHP, Composer, Curl i utilitats
                     apt-get update
                     apt-get install -y --no-install-recommends \
                         php-cli \
@@ -39,22 +34,13 @@ pipeline {
                         git \
                         zip \
                         unzip \
-                        ca-certificates # Reinstallar/actualitzar certificats SSL
-
-                    echo "=== Instal·lant Composer ==="
-                    # Instal·la Composer si no està present globalment
+                        ca-certificates
+                    
                     which composer || (php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');" && php composer-setup.php --install-dir=/usr/local/bin --filename=composer)
                     
-                    echo "=== Instal·lant dependències del projecte ==="
                     if [ -f "composer.json" ]; then
-                        # Instal·la dependències (incloent les de dev, com PHPUnit)
                         composer install --no-interaction --no-progress
-                    else
-                        echo "⚠️ Advertència: No s'ha trobat composer.json."
                     fi
-                    
-                    echo "=== Verificant estructura del projecte ==="
-                    ls -la
                 '''
             }
         }
@@ -63,25 +49,14 @@ pipeline {
             steps {
                 script {
                     sh '''
-                        echo "=== Executant proves unitàries i generant informe de cobertura ==="
-                        
-                        # Si s'usa Composer, crida l'executable local; altrament, crida el global.
                         if [ -f "vendor/bin/phpunit" ]; then
-                           # Utilitzem l'executable de PHPUnit instal·lat per Composer
-                           ./vendor/bin/phpunit --coverage-clover coverage.xml || echo "⚠️ Les proves han fallat o no s'han trobat."
+                           ./vendor/bin/phpunit --coverage-clover coverage.xml || true
                         elif which phpunit >/dev/null 2>&1; then
-                           # Utilitzem PHPUnit instal·lat globalment (menys comú en Docker)
-                           phpunit --coverage-clover coverage.xml || echo "⚠️ Les proves han fallat o no s'han trobat."
-                        else
-                           echo "❌ ERROR: PHPUnit no està instal·lat. La cobertura de codi serà 0."
+                           phpunit --coverage-clover coverage.xml || true
                         fi
                         
-                        # Assegura que el fitxer existeix, encara que estigui buit, per evitar la IOException en SonarQube
                         if [ ! -f "coverage.xml" ]; then
-                           echo "⚠️ No s'ha pogut generar coverage.xml. Creant fitxer buit per SonarQube."
                            touch coverage.xml
-                        else
-                           echo "✅ Informe coverage.xml generat correctament."
                         fi
                     '''
                 }
@@ -111,7 +86,7 @@ pipeline {
         stage('Quality Gate') {
             steps {
                 timeout(time: 5, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: false
+                    waitForQualityGate abortPipeline: false 
                 }
             }
         }
@@ -120,14 +95,11 @@ pipeline {
             steps {
                 script {
                     sh '''
-                        echo "=== Desplegant aplicació PHP per a DAST ==="
-
                         docker network create zapnet || true
 
                         docker stop php-pokemon || true
                         docker rm php-pokemon || true
 
-                        # Utilitzem ${WORKSPACE} per garantir la ruta completa al volum
                         docker run -d --name php-pokemon --network zapnet \
                             -v ${WORKSPACE}:/var/www/html \
                             -w /var/www/html \
@@ -135,9 +107,8 @@ pipeline {
                             php:8.2-cli \
                             php -S 0.0.0.0:8888 -t .
 
-                        echo "Esperant que el servidor PHP estigui llest..."
                         sleep 5
-                        docker exec php-pokemon curl -I http://localhost:8888 || echo "Servidor PHP iniciat correctament"
+                        docker exec php-pokemon curl -I http://localhost:8888 || true
                     '''
                 }
             }
@@ -147,8 +118,6 @@ pipeline {
             steps {
                 script {
                     sh '''
-                        echo "=== Iniciant escaneig amb OWASP ZAP ==="
-
                         docker stop zap-pokemon || true
                         docker rm zap-pokemon || true
                         mkdir -p ${WORKSPACE}/zap-reports
@@ -171,19 +140,10 @@ pipeline {
             steps {
                 script {
                     sh '''
-                        echo "=== Anàlisi de seguretat específica per PHP ==="
-
-                        echo "-- Buscant SQL injections --"
-                        grep -r "mysql_query\\|mysqli_query" . --include="*.php" | grep -v "prepare" || echo "✅ No s'han trobat consultes sense preparar"
-
-                        echo "-- Buscant XSS --"
-                        grep -r "echo \\$_GET\\|echo \\$_POST\\|print \\$_GET\\|print \\$_POST" . --include="*.php" || echo "✅ No s'han trobat sortides directes sense escapament"
-
-                        echo "-- Buscant inclusions perilloses --"
-                        grep -r "include\\|require" . --include="*.php" | grep "\\$_GET\\|\\$_POST" || echo "✅ No s'han trobat inclusions dinàmiques perilloses"
-
-                        echo "-- Buscant funcions perilloses --"
-                        grep -r "eval\\|exec\\|system\\|shell_exec\\|passthru" . --include="*.php" || echo "✅ No s'han trobat funcions perilloses"
+                        grep -r "mysql_query\\|mysqli_query" . --include="*.php" | grep -v "prepare" || true
+                        grep -r "echo \\$_GET\\|echo \\$_POST\\|print \\$_GET\\|print \\$_POST" . --include="*.php" || true
+                        grep -r "include\\|require" . --include="*.php" | grep "\\$_GET\\|\\$_POST" || true
+                        grep -r "eval\\|exec\\|system\\|shell_exec\\|passthru" . --include="*.php" || true
                     '''
                 }
             }
@@ -193,12 +153,10 @@ pipeline {
             steps {
                 script {
                     sh '''
-                        echo "=== Verificant informes ZAP ==="
                         mkdir -p ${WORKSPACE}/zap-reports
                         chmod -R 777 ${WORKSPACE}/zap-reports
 
                         if [ ! -f ${WORKSPACE}/zap-reports/zap_report.html ]; then
-                            echo "⚠️ No s'ha trobat zap_report.html, creant placeholder..."
                             echo "<html><body><h2>No s'ha generat l'informe de ZAP.</h2></body></html>" > ${WORKSPACE}/zap-reports/zap_report.html
                         fi
                     '''
@@ -221,9 +179,7 @@ pipeline {
     post {
         always {
             script {
-                // Aquest bloc es pot executar sense context 'node', per això és millor tenir-lo amb el 'script' per gestionar les crides 'sh'.
                 sh '''
-                    echo "=== Netejant recursos ==="
                     docker stop php-pokemon || true
                     docker rm php-pokemon || true
                     docker stop zap-pokemon || true
@@ -234,16 +190,11 @@ pipeline {
         }
 
         success {
-            echo """
-            ✅ Pipeline completat correctament!
-            📊 Consulta els informes a:
-            - SonarQube: http://[IP-VM]:9000/dashboard?id=${SONAR_PROJECT_KEY}
-            - OWASP ZAP: Arxius d'artefactes de Jenkins
-            """
+            echo "Pipeline completat correctament!"
         }
 
         failure {
-            echo '❌ El pipeline ha fallat. Revisa els logs per més detalls.'
+            echo 'El pipeline ha fallat. Revisa els logs per més detalls.'
         }
     }
 }
