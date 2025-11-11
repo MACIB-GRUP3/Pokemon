@@ -61,45 +61,45 @@ pipeline {
         }
 
         stage('Deploy for DAST') {
-    steps {
-        script {
-            sh '''
-                echo "=== Desplegant aplicació PHP per a DAST ==="
+            steps {
+                script {
+                    sh '''
+                        echo "=== Desplegant aplicació PHP per a DAST ==="
 
-                # Crear red si no existe
-                docker network create zapnet || true
+                        docker network create zapnet || true
+                        docker stop php-pokemon || true
+                        docker rm php-pokemon || true
 
-                # Limpiar contenedores anteriores
-                docker stop php-pokemon || true
-                docker rm php-pokemon || true
+                        TMP_HTML=$(mktemp -d)
+                        cp -r ${WORKSPACE}/* $TMP_HTML
+                        chown -R 33:33 $TMP_HTML
 
-                # Crear directorio temporal con permisos para www-data
-                TMP_HTML=$(mktemp -d)
-                cp -r ${WORKSPACE}/* $TMP_HTML
-                chown -R 33:33 $TMP_HTML  # www-data
+                        docker run -d --name php-pokemon --network zapnet \
+                            -v $TMP_HTML:/var/www/html:rw \
+                            -p ${APP_PORT}:80 \
+                            php:8.2-apache
 
-                # Levantar Apache en primer plano con el contenido
-                docker run -d --name php-pokemon --network zapnet \
-                    -v $TMP_HTML:/var/www/html:rw \
-                    -p ${APP_PORT}:80 \
-                    php:8.2-apache \
-                    apache2-foreground
+                        echo "Esperant que el servidor PHP estigui llest..."
+                        RETRY=0
+                        until [ $RETRY -ge 10 ]; do
+                            STATUS=$(docker exec php-pokemon curl -s -o /dev/null -w %{http_code} http://localhost:80 || echo 0)
+                            if [ "$STATUS" -eq 200 ]; then
+                                echo "Servidor PHP disponible!"
+                                break
+                            fi
+                            echo "Esperant 2 segons més... (estat: $STATUS)"
+                            sleep 2
+                            RETRY=$((RETRY+1))
+                        done
 
-                # Esperar a que Apache arranque
-                echo "Esperant que el servidor PHP estigui llest..."
-                for i in {1..10}; do
-                    STATUS=$(docker exec php-pokemon curl -s -o /dev/null -w "%{http_code}" http://localhost:80)
-                    if [ "$STATUS" -eq 200 ]; then
-                        echo "Servidor PHP llest!"
-                        break
-                    fi
-                    sleep 2
-                done
-            '''
+                        if [ "$STATUS" -ne 200 ]; then
+                            echo "⚠️ El servidor PHP no respon amb 200 OK"
+                            exit 1
+                        fi
+                    '''
+                }
+            }
         }
-    }
-}
-
 
         stage('DAST - OWASP ZAP Scan') {
             steps {
@@ -112,11 +112,7 @@ pipeline {
                         mkdir -p ${WORKSPACE}/zap-reports
                         chmod -R 777 ${WORKSPACE}/zap-reports
 
-                        if ! docker image inspect ghcr.io/zaproxy/zaproxy:weekly >/dev/null 2>&1; then
-                            docker pull ghcr.io/zaproxy/zaproxy:weekly
-                        fi
-
-                        docker run --user root --name zap-pokemon --network zapnet \
+                        docker run --rm --user root --name zap-pokemon --network zapnet \
                             -v ${WORKSPACE}/zap-reports:/zap/wrk:rw \
                             -t ghcr.io/zaproxy/zaproxy:weekly \
                             zap-baseline.py -t http://php-pokemon:80 -r zap_report.html -I
@@ -186,6 +182,7 @@ pipeline {
                     docker stop zap-pokemon || true
                     docker rm zap-pokemon || true
                     docker network rm zapnet || true
+                    rm -rf $TMP_HTML || true
                 '''
             }
         }
