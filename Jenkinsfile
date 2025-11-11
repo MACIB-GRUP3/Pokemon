@@ -7,7 +7,6 @@ pipeline {
         SONAR_PROJECT_NAME = 'Pokemon PHP App'
         APP_PORT = '8888'
         ZAP_PORT = '8090'
-        # Usamos WORKSPACE para el mapeo de volumen de Docker de forma más segura
         WORKSPACE = sh(returnStdout: true, script: 'pwd').trim()
     }
 
