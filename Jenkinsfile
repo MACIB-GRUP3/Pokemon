@@ -150,17 +150,25 @@ pipeline {
                         mkdir -p ${WORKSPACE}/zap-reports
                         chmod 777 ${WORKSPACE}/zap-reports
                         
-                        # Ejecutar ZAP scan
+                        # Ejecutar ZAP scan (nombre correcto de la imagen)
                         docker run --name zap-pokemon \
                             --network host \
                             -v ${WORKSPACE}/zap-reports:/zap/wrk:rw \
-                            -t owasp/zap2docker-stable \
+                            -t ghcr.io/zaproxy/zaproxy:stable \
                             zap-baseline.py \
                             -t http://localhost:${APP_PORT} \
                             -r zap_report.html \
                             -I || echo "⚠️ ZAP completado con advertencias"
                         
                         echo "✅ ZAP scan completado"
+                        
+                        # Verificar que se generó el reporte
+                        if [ -f ${WORKSPACE}/zap-reports/zap_report.html ]; then
+                            echo "✅ Reporte ZAP generado correctamente"
+                            ls -lh ${WORKSPACE}/zap-reports/
+                        else
+                            echo "❌ No se generó el reporte ZAP"
+                        fi
                     '''
                 }
             }
@@ -194,18 +202,27 @@ pipeline {
             steps {
                 script {
                     try {
-                        publishHTML([
-                            allowMissing: false,
-                            alwaysLinkToLastBuild: true,
-                            keepAll: true,
-                            reportDir: 'zap-reports',
-                            reportFiles: 'zap_report.html',
-                            reportName: 'OWASP ZAP Security Report'
-                        ])
+                        // Verificar si existe el reporte antes de publicar
+                        def zapReportExists = fileExists('zap-reports/zap_report.html')
                         
+                        if (zapReportExists) {
+                            publishHTML([
+                                allowMissing: false,
+                                alwaysLinkToLastBuild: true,
+                                keepAll: true,
+                                reportDir: 'zap-reports',
+                                reportFiles: 'zap_report.html',
+                                reportName: 'OWASP ZAP Security Report'
+                            ])
+                            echo "✅ Reporte ZAP publicado"
+                        } else {
+                            echo "⚠️ No se encontró reporte ZAP, omitiendo publicación"
+                        }
+                        
+                        // Archivar artifacts si existen
                         archiveArtifacts artifacts: 'zap-reports/**/*', allowEmptyArchive: true
                         
-                        echo "✅ Reportes publicados"
+                        echo "✅ Proceso de publicación completado"
                     } catch (Exception e) {
                         echo "⚠️ Error publicando reportes: ${e.message}"
                     }
