@@ -1,6 +1,6 @@
 pipeline {
     agent any
-
+    
     environment {
         GIT_REPO = 'https://github.com/MACIB-GRUP3/Pokemon.git'
         SONAR_PROJECT_KEY = 'pokemon-php'
@@ -8,30 +8,28 @@ pipeline {
         APP_PORT = '8888'
         ZAP_PORT = '8090'
     }
-
+    
     triggers {
         pollSCM('H/5 * * * *')
     }
-
+    
     stages {
         stage('Checkout') {
             steps {
                 git branch: 'main', url: "${GIT_REPO}"
             }
         }
-
+        
         stage('Prepare Environment') {
             steps {
                 sh '''
-                    echo "=== Verificant estructura del projecte ==="
+                    echo "Listado del repositorio:"
                     ls -la
-
-                    echo "=== Instal·lant PHP i Composer si cal ==="
-                    which php || (apt-get update && apt-get install -y php php-cli php-xml php-mbstring curl)
+                    which php || apt-get update && apt-get install -y php php-cli php-xml php-mbstring curl
                 '''
             }
         }
-
+        
         stage('SAST - SonarQube Analysis') {
             steps {
                 script {
@@ -51,7 +49,7 @@ pipeline {
                 }
             }
         }
-
+        
         stage('Quality Gate') {
             steps {
                 timeout(time: 5, unit: 'MINUTES') {
@@ -59,146 +57,90 @@ pipeline {
                 }
             }
         }
-
-        stage('Deploy for DAST') {
+        
+        stage('Deploy PHP Server') {
             steps {
                 script {
                     sh '''
-                        echo "=== Desplegant aplicació PHP per a DAST ==="
-
-                        docker network create zapnet || true
-                        docker stop php-pokemon || true
-                        docker rm php-pokemon || true
-
-                        TMP_HTML=$(mktemp -d)
-                        cp -r ${WORKSPACE}/* $TMP_HTML
-                        chown -R 33:33 $TMP_HTML
-
-                        docker run -d --name php-pokemon --network zapnet \
-                            -v $TMP_HTML:/var/www/html:rw \
-                            -p ${APP_PORT}:80 \
-                            php:8.2-apache
-
-                        echo "Esperant que el servidor PHP estigui llest..."
-                        RETRY=0
-                        until [ $RETRY -ge 10 ]; do
-                            STATUS=$(docker exec php-pokemon curl -s -o /dev/null -w %{http_code} http://localhost:80 || echo 0)
-                            if [ "$STATUS" -eq 200 ]; then
-                                echo "Servidor PHP disponible!"
-                                break
-                            fi
-                            echo "Esperant 2 segons més... (estat: $STATUS)"
-                            sleep 2
-                            RETRY=$((RETRY+1))
-                        done
-
-                        if [ "$STATUS" -ne 200 ]; then
-                            echo "⚠️ El servidor PHP no respon amb 200 OK"
-                            exit 1
-                        fi
+                        pkill -f "php -S" || true
+                        nohup php -S 0.0.0.0:${APP_PORT} -t . > php-server.log 2>&1 &
+                        echo $! > php-server.pid
+                        sleep 5
+                        curl -I http://localhost:${APP_PORT} || echo "Servidor PHP iniciado"
                     '''
                 }
             }
         }
-
+        
         stage('DAST - OWASP ZAP Scan') {
             steps {
                 script {
                     sh '''
-                        echo "=== Iniciant escaneig amb OWASP ZAP ==="
-
                         docker stop zap-pokemon || true
                         docker rm zap-pokemon || true
                         mkdir -p ${WORKSPACE}/zap-reports
-                        chmod -R 777 ${WORKSPACE}/zap-reports
-
-                        docker run --rm --user root --name zap-pokemon --network zapnet \
+                        docker run --name zap-pokemon \
+                            --network host \
                             -v ${WORKSPACE}/zap-reports:/zap/wrk:rw \
-                            -t ghcr.io/zaproxy/zaproxy:weekly \
-                            zap-baseline.py -t http://php-pokemon:80 -r zap_report.html -I
+                            -t owasp/zap2docker-stable \
+                            zap-baseline.py \
+                            -t http://localhost:${APP_PORT} \
+                            -r zap_report.html \
+                            -I
                     '''
                 }
             }
         }
-
-        stage('Security Analysis - PHP Specific') {
+        
+        stage('PHP Security Checks') {
             steps {
                 script {
                     sh '''
-                        echo "=== Anàlisi de seguretat específica per PHP ==="
-
-                        echo "-- Buscant SQL injections --"
-                        grep -r "mysql_query\\|mysqli_query" . --include="*.php" | grep -v "prepare" || echo "✅ No s'han trobat consultes sense preparar"
-
-                        echo "-- Buscant XSS --"
-                        grep -r "echo \\$_GET\\|echo \\$_POST\\|print \\$_GET\\|print \\$_POST" . --include="*.php" || echo "✅ No s'han trobat sortides directes sense escapament"
-
-                        echo "-- Buscant inclusions perilloses --"
-                        grep -r "include\\|require" . --include="*.php" | grep "\\$_GET\\|\\$_POST" || echo "✅ No s'han trobat inclusions dinàmiques perilloses"
-
-                        echo "-- Buscant funcions perilloses --"
-                        grep -r "eval\\|exec\\|system\\|shell_exec\\|passthru" . --include="*.php" || echo "✅ No s'han trobat funcions perilloses"
+                        echo "=== PHP Security Analysis ==="
+                        grep -r "mysql_query\\|mysqli_query" . --include="*.php" | grep -v "prepare" || echo "No se encontraron queries sin preparar"
+                        grep -r "echo \\$_GET\\|echo \\$_POST\\|print \\$_GET\\|print \\$_POST" . --include="*.php" || echo "No se encontraron outputs directos sin escape"
+                        grep -r "include\\|require" . --include="*.php" | grep "\\$_GET\\|\\$_POST" || echo "No se encontraron inclusiones dinámicas peligrosas"
+                        grep -r "eval\\|exec\\|system\\|shell_exec\\|passthru" . --include="*.php" || echo "No se encontraron funciones peligrosas"
                     '''
                 }
             }
         }
-
+        
         stage('Publish Reports') {
             steps {
-                script {
-                    sh '''
-                        echo "=== Verificant informes ZAP ==="
-                        mkdir -p ${WORKSPACE}/zap-reports
-                        chmod -R 777 ${WORKSPACE}/zap-reports
-
-                        if [ ! -f ${WORKSPACE}/zap-reports/zap_report.html ]; then
-                            echo "⚠️ No s'ha trobat zap_report.html, creant placeholder..."
-                            echo "<html><body><h2>No s'ha generat l'informe de ZAP.</h2></body></html>" > ${WORKSPACE}/zap-reports/zap_report.html
-                        fi
-                    '''
-
-                    publishHTML([
-                        allowMissing: true,
-                        alwaysLinkToLastBuild: true,
-                        keepAll: true,
-                        reportDir: 'zap-reports',
-                        reportFiles: 'zap_report.html',
-                        reportName: 'OWASP ZAP Security Report'
-                    ])
-
-                    archiveArtifacts artifacts: 'zap-reports/**/*', allowEmptyArchive: true
-                }
+                publishHTML([
+                    allowMissing: false,
+                    alwaysLinkToLastBuild: true,
+                    keepAll: true,
+                    reportDir: 'zap-reports',
+                    reportFiles: 'zap_report.html',
+                    reportName: 'OWASP ZAP Security Report'
+                ])
+                
+                archiveArtifacts artifacts: 'zap-reports/**/*', allowEmptyArchive: true
             }
         }
     }
-
+    
     post {
         always {
             script {
                 sh '''
-                    echo "=== Netejant recursos ==="
-                    docker stop php-pokemon || true
-                    docker rm php-pokemon || true
+                    if [ -f php-server.pid ]; then
+                        kill $(cat php-server.pid) || true
+                        rm php-server.pid
+                    fi
+                    pkill -f "php -S" || true
                     docker stop zap-pokemon || true
                     docker rm zap-pokemon || true
-                    docker network rm zapnet || true
-                    rm -rf $TMP_HTML || true
                 '''
             }
         }
-
         success {
-            echo """
-            ✅ Pipeline completat correctament!
-            📊 Consulta els informes a:
-            - SonarQube: http://[IP-VM]:9000
-            - OWASP ZAP: Arxius d'artefactes de Jenkins
-            """
+            echo "✅ Pipeline completado exitosamente! Revisa SonarQube y ZAP."
         }
-
         failure {
-            echo '❌ El pipeline ha fallat. Revisa els logs per més detalls.'
+            echo "❌ El pipeline ha fallado. Revisa los logs."
         }
     }
 }
-
