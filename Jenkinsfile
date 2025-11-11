@@ -146,9 +146,19 @@ pipeline {
                         docker stop zap-pokemon 2>/dev/null || true
                         docker rm zap-pokemon 2>/dev/null || true
                         
-                        # Crear directorio para reportes
+                        # Crear directorio para reportes con permisos correctos
                         mkdir -p ${WORKSPACE}/zap-reports
-                        chmod 777 ${WORKSPACE}/zap-reports
+                        chmod -R 777 ${WORKSPACE}/zap-reports
+                        
+                        # Obtener la IP del host para que ZAP pueda conectarse
+                        HOST_IP=$(ip route | grep default | awk '{print $3}')
+                        echo "🌐 IP del host Docker: ${HOST_IP}"
+                        
+                        # Si no se puede obtener la IP, usar gateway de Docker
+                        if [ -z "$HOST_IP" ]; then
+                            HOST_IP="172.17.0.1"
+                            echo "⚠️ Usando IP por defecto del gateway Docker: ${HOST_IP}"
+                        fi
                         
                         echo "🔍 Intentando descargar imagen de ZAP..."
                         
