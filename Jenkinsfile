@@ -77,24 +77,16 @@ pipeline {
                     withSonarQubeEnv('SonarQube') {
 
                         sh """
+    ${scannerHome}/bin/sonar-scanner \
+        -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
+        -Dsonar.projectName="${SONAR_PROJECT_NAME}" \
+        -Dsonar.sources=. \
+        -Dsonar.language=php \
+        -Dsonar.sourceEncoding=UTF-8 \
+        -Dsonar.php.coverage.reportPaths=coverage.xml \
+        -Dsonar.exclusions="**/vendor/**,**/tests/**"
+                            """
 
-                            ${scannerHome}/bin/sonar-scanner \
-
-                                -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
-
-                                -Dsonar.projectName='${SONAR_PROJECT_NAME}' \
-
-                                -Dsonar.sources=. \
-
-                                -Dsonar.language=php \
-
-                                -Dsonar.sourceEncoding=UTF-8 \
-
-                                -Dsonar.php.coverage.reportPaths=coverage.xml \
-
-                                -Dsonar.exclusions=**/vendor/**,**/tests/**
-
-                        """
 
                     }
 
