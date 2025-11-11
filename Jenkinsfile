@@ -17,9 +17,7 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                // FIX SSL/TLS: Desactiva la verificación SSL. Esto soluciona el fallo GnuTLS.
                 sh 'git config --global http.sslVerify false'
-                
                 git branch: 'main', url: "${GIT_REPO}"
             }
         }
