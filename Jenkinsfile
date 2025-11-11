@@ -7,7 +7,6 @@ pipeline {
         SONAR_PROJECT_NAME = 'Pokemon PHP App'
         APP_PORT = '8888'
         ZAP_PORT = '8090'
-        # Capturamos el WORKSPACE de forma segura
         WORKSPACE = sh(returnStdout: true, script: 'pwd').trim()
     }
 
