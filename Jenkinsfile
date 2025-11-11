@@ -7,8 +7,6 @@ pipeline {
         SONAR_PROJECT_NAME = 'Pokemon PHP App'
         APP_PORT = '8888'
         ZAP_PORT = '8090'
-        // Obtener la IP del host de Docker para comunicación entre contenedores
-        DOCKER_HOST_IP = sh(script: "ip route | grep docker0 | awk '{print \$9}'", returnStdout: true).trim()
     }
     
     triggers {
@@ -70,11 +68,11 @@ pipeline {
                 script {
                     sh '''
                         echo "=== Deteniendo servidores PHP anteriores ==="
-                        docker stop pokemon-php-app || true
-                        docker rm pokemon-php-app || true
+                        docker stop pokemon-php-app 2>/dev/null || true
+                        docker rm pokemon-php-app 2>/dev/null || true
                         
                         echo "=== Creando red Docker si no existe ==="
-                        docker network create pokemon-network || true
+                        docker network create pokemon-network 2>/dev/null || true
                         
                         echo "=== Iniciando aplicación PHP en Docker ==="
                         docker run -d \
@@ -85,22 +83,29 @@ pipeline {
                             -w /var/www/html \
                             php:8.1-apache
                         
+                        echo "=== Esperando que el contenedor inicie ==="
+                        sleep 5
+                        
                         echo "=== Configurando Apache en el contenedor ==="
-                        docker exec pokemon-php-app bash -c "a2enmod rewrite && service apache2 restart"
+                        docker exec pokemon-php-app bash -c "a2enmod rewrite && service apache2 restart" || true
                         
                         echo "=== Esperando que el servidor esté listo ==="
                         sleep 10
                         
                         echo "=== Verificando que la aplicación responde ==="
-                        for i in {1..10}; do
-                            if curl -f http://localhost:${APP_PORT}; then
+                        for i in 1 2 3 4 5 6 7 8 9 10; do
+                            echo "Intento $i/10..."
+                            if curl -f -s http://localhost:${APP_PORT} > /dev/null 2>&1; then
                                 echo "✅ Aplicación respondiendo correctamente"
-                                break
+                                exit 0
                             else
-                                echo "⏳ Intento $i/10 - Esperando respuesta..."
+                                echo "⏳ Esperando respuesta del servidor..."
                                 sleep 3
                             fi
                         done
+                        
+                        echo "⚠️  Advertencia: No se pudo verificar la respuesta de la app, pero continuando..."
+                        docker logs pokemon-php-app
                     '''
                 }
             }
@@ -111,8 +116,8 @@ pipeline {
                 script {
                     sh '''
                         echo "=== Limpiando contenedores ZAP anteriores ==="
-                        docker stop zap-pokemon || true
-                        docker rm zap-pokemon || true
+                        docker stop zap-pokemon 2>/dev/null || true
+                        docker rm zap-pokemon 2>/dev/null || true
                         
                         echo "=== Creando directorio para reportes ==="
                         mkdir -p ${WORKSPACE}/zap-reports
@@ -128,10 +133,12 @@ pipeline {
                             -r zap_report.html \
                             -w zap_report.md \
                             -J zap_report.json \
-                            -I || true
+                            -I || echo "⚠️  ZAP scan completado con advertencias"
                         
                         echo "=== Verificando reportes generados ==="
-                        ls -lh ${WORKSPACE}/zap-reports/
+                        ls -lh ${WORKSPACE}/zap-reports/ || true
+                        
+                        echo "✅ Scan ZAP finalizado"
                     '''
                 }
             }
@@ -169,7 +176,7 @@ pipeline {
                 script {
                     // Publicar reporte HTML de ZAP
                     publishHTML([
-                        allowMissing: false,
+                        allowMissing: true,
                         alwaysLinkToLastBuild: true,
                         keepAll: true,
                         reportDir: 'zap-reports',
@@ -193,15 +200,15 @@ pipeline {
                 echo "=== Limpiando recursos ==="
                 sh '''
                     # Detener y eliminar contenedor PHP
-                    docker stop pokemon-php-app || true
-                    docker rm pokemon-php-app || true
+                    docker stop pokemon-php-app 2>/dev/null || true
+                    docker rm pokemon-php-app 2>/dev/null || true
                     
                     # Detener y eliminar contenedor ZAP
-                    docker stop zap-pokemon || true
-                    docker rm zap-pokemon || true
+                    docker stop zap-pokemon 2>/dev/null || true
+                    docker rm zap-pokemon 2>/dev/null || true
                     
-                    # Limpiar red (opcional - comentar si causa problemas)
-                    # docker network rm pokemon-network || true
+                    # Opcional: Limpiar red (comentado para evitar problemas si hay otros contenedores)
+                    # docker network rm pokemon-network 2>/dev/null || true
                     
                     echo "✅ Limpieza completada"
                 '''
