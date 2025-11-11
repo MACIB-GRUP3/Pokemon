@@ -7,6 +7,7 @@ pipeline {
         SONAR_PROJECT_NAME = 'Pokemon PHP App'
         APP_PORT = '8888'
         ZAP_PORT = '8090'
+        # Capturamos el WORKSPACE de forma segura
         WORKSPACE = sh(returnStdout: true, script: 'pwd').trim()
     }
 
@@ -17,6 +18,8 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
+                // 1. 🚨 SOLUCIÓN AL ERROR SSL/TLS: Forzar a Git a usar OpenSSL en lugar de GnuTLS
+                sh 'git config --global http.sslBackend "openssl"'
                 git branch: 'main', url: "${GIT_REPO}"
             }
         }
@@ -24,29 +27,39 @@ pipeline {
         stage('Prepare Environment') {
             steps {
                 sh '''
-                    echo "=== Verificant estructura del projecte ==="
-                    ls -la
-
-                    echo "=== Instal·lant PHP, Composer i dependències ==="
-                    # Instal·la PHP i extensions bàsiques si cal
-                    # S'afegeix 'zip' i 'unzip' per a Composer i 'git'
-                    which php || (apt-get update && apt-get install -y php php-cli php-xml php-mbstring curl git zip unzip)
+                    echo "=== Instal·lant dependències del sistema (Dins del contenidor Jenkins) ==="
                     
-                    # Instal·la Composer si no està present
+                    # Comandos de instalación para Debian/Ubuntu.
+                    # Assegurem que les dependències clau estiguin instal·lades per executar PHP, Composer, Curl i utilitats
+                    apt-get update
+                    apt-get install -y --no-install-recommends \
+                        php-cli \
+                        php-xml \
+                        php-mbstring \
+                        curl \
+                        git \
+                        zip \
+                        unzip \
+                        ca-certificates # Reinstallar/actualitzar certificats SSL
+
+                    echo "=== Instal·lant Composer ==="
+                    # Instal·la Composer si no està present globalment
                     which composer || (php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');" && php composer-setup.php --install-dir=/usr/local/bin --filename=composer)
                     
-                    # Instal·la dependències (incloent les de dev, com PHPUnit)
+                    echo "=== Instal·lant dependències del projecte ==="
                     if [ -f "composer.json" ]; then
-                        echo "Instal·lant dependències de Composer (inclou dev)..."
+                        # Instal·la dependències (incloent les de dev, com PHPUnit)
                         composer install --no-interaction --no-progress
                     else
-                        echo "⚠️ Advertència: No s'ha trobat composer.json. S'assumeix que PHPUnit està instal·lat globalment."
+                        echo "⚠️ Advertència: No s'ha trobat composer.json."
                     fi
+                    
+                    echo "=== Verificant estructura del projecte ==="
+                    ls -la
                 '''
             }
         }
         
-        // 🚨 NOU PAS CLAU: Executa les proves i genera coverage.xml
         stage('Unit Tests & Coverage') {
             steps {
                 script {
@@ -55,9 +68,11 @@ pipeline {
                         
                         # Si s'usa Composer, crida l'executable local; altrament, crida el global.
                         if [ -f "vendor/bin/phpunit" ]; then
-                           ./vendor/bin/phpunit --coverage-clover coverage.xml || echo "⚠️ Les proves han fallat o no s'han trobat. El coverage.xml es generarà amb resultats parcials o buits."
+                           # Utilitzem l'executable de PHPUnit instal·lat per Composer
+                           ./vendor/bin/phpunit --coverage-clover coverage.xml || echo "⚠️ Les proves han fallat o no s'han trobat."
                         elif which phpunit >/dev/null 2>&1; then
-                           phpunit --coverage-clover coverage.xml || echo "⚠️ Les proves han fallat o no s'han trobat (usant phpunit global)."
+                           # Utilitzem PHPUnit instal·lat globalment (menys comú en Docker)
+                           phpunit --coverage-clover coverage.xml || echo "⚠️ Les proves han fallat o no s'han trobat."
                         else
                            echo "❌ ERROR: PHPUnit no està instal·lat. La cobertura de codi serà 0."
                         fi
@@ -189,7 +204,6 @@ pipeline {
                         fi
                     '''
 
-                    // Assegura't de tenir instal·lat el plugin 'HTML Publisher'
                     publishHTML([
                         allowMissing: true,
                         alwaysLinkToLastBuild: true,
@@ -208,6 +222,7 @@ pipeline {
     post {
         always {
             script {
+                // Aquest bloc es pot executar sense context 'node', per això és millor tenir-lo amb el 'script' per gestionar les crides 'sh'.
                 sh '''
                     echo "=== Netejant recursos ==="
                     docker stop php-pokemon || true
