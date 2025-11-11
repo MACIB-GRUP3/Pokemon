@@ -71,15 +71,22 @@ pipeline {
                         docker stop php-pokemon || true
                         docker rm php-pokemon || true
 
+                        # Ajustar permisos para que Apache pueda leer los archivos
+                        chmod -R 755 ${WORKSPACE}
+                        chown -R www-data:www-data ${WORKSPACE}
+
                         docker run -d --name php-pokemon --network zapnet \
-                            -v ${WORKSPACE}:/var/www/html \
+                            -v ${WORKSPACE}:/var/www/html:rw \
                             -w /var/www/html \
                             -p ${APP_PORT}:80 \
                             php:8.2-apache
 
                         echo "Esperant que el servidor PHP estigui llest..."
-                        sleep 5
-                        docker exec php-pokemon curl -I http://localhost:80 || echo "Servidor PHP iniciat correctament"
+                        # Esperar activamente a que Apache devuelva 200
+                        until docker exec php-pokemon curl -s -o /dev/null -w "%{http_code}" http://localhost:80 | grep -q "200"; do
+                            sleep 1
+                        done
+                        echo "Servidor PHP iniciat correctament"
                     '''
                 }
             }
@@ -188,5 +195,4 @@ pipeline {
         }
     }
 }
-
 
