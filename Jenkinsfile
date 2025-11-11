@@ -14,9 +14,35 @@ pipeline {
     }
     
     stages {
+        stage('Clean Workspace') {
+            steps {
+                script {
+                    // Limpiar el workspace antes de comenzar
+                    sh '''
+                        echo "Limpiando workspace..."
+                        rm -rf .git
+                        rm -rf *
+                    '''
+                }
+            }
+        }
+        
         stage('Checkout') {
             steps {
-                git branch: 'main', url: "${GIT_REPO}"
+                script {
+                    // Realizar checkout manual con manejo de errores
+                    retry(3) {
+                        checkout([
+                            $class: 'GitSCM',
+                            branches: [[name: '*/main']],
+                            userRemoteConfigs: [[url: "${GIT_REPO}"]],
+                            extensions: [
+                                [$class: 'CleanBeforeCheckout'],
+                                [$class: 'CloneOption', depth: 1, noTags: false, shallow: true]
+                            ]
+                        ])
+                    }
+                }
             }
         }
         
@@ -125,15 +151,20 @@ pipeline {
     post {
         always {
             script {
-                sh '''
-                    if [ -f php-server.pid ]; then
-                        kill $(cat php-server.pid) || true
-                        rm php-server.pid
-                    fi
-                    pkill -f "php -S" || true
-                    docker stop zap-pokemon || true
-                    docker rm zap-pokemon || true
-                '''
+                // Asegurarnos de que estamos en un contexto de node
+                try {
+                    sh '''
+                        if [ -f php-server.pid ]; then
+                            kill $(cat php-server.pid) || true
+                            rm php-server.pid
+                        fi
+                        pkill -f "php -S" || true
+                        docker stop zap-pokemon || true
+                        docker rm zap-pokemon || true
+                    '''
+                } catch (Exception e) {
+                    echo "Error en limpieza: ${e.message}"
+                }
             }
         }
         success {
