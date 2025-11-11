@@ -61,36 +61,45 @@ pipeline {
         }
 
         stage('Deploy for DAST') {
-            steps {
-                script {
-                    sh '''
-                        echo "=== Desplegant aplicació PHP per a DAST ==="
+    steps {
+        script {
+            sh '''
+                echo "=== Desplegant aplicació PHP per a DAST ==="
 
-                        docker network create zapnet || true
+                # Crear red si no existe
+                docker network create zapnet || true
 
-                        docker stop php-pokemon || true
-                        docker rm php-pokemon || true
+                # Limpiar contenedores anteriores
+                docker stop php-pokemon || true
+                docker rm php-pokemon || true
 
-                        # Ajustar permisos para que Apache pueda leer los archivos
-                        chmod -R 755 ${WORKSPACE}
-                        chown -R www-data:www-data ${WORKSPACE}
+                # Crear directorio temporal con permisos para www-data
+                TMP_HTML=$(mktemp -d)
+                cp -r ${WORKSPACE}/* $TMP_HTML
+                chown -R 33:33 $TMP_HTML  # www-data
 
-                        docker run -d --name php-pokemon --network zapnet \
-                            -v ${WORKSPACE}:/var/www/html:rw \
-                            -w /var/www/html \
-                            -p ${APP_PORT}:80 \
-                            php:8.2-apache
+                # Levantar Apache en primer plano con el contenido
+                docker run -d --name php-pokemon --network zapnet \
+                    -v $TMP_HTML:/var/www/html:rw \
+                    -p ${APP_PORT}:80 \
+                    php:8.2-apache \
+                    apache2-foreground
 
-                        echo "Esperant que el servidor PHP estigui llest..."
-                        # Esperar activamente a que Apache devuelva 200
-                        until docker exec php-pokemon curl -s -o /dev/null -w "%{http_code}" http://localhost:80 | grep -q "200"; do
-                            sleep 1
-                        done
-                        echo "Servidor PHP iniciat correctament"
-                    '''
-                }
-            }
+                # Esperar a que Apache arranque
+                echo "Esperant que el servidor PHP estigui llest..."
+                for i in {1..10}; do
+                    STATUS=$(docker exec php-pokemon curl -s -o /dev/null -w "%{http_code}" http://localhost:80)
+                    if [ "$STATUS" -eq 200 ]; then
+                        echo "Servidor PHP llest!"
+                        break
+                    fi
+                    sleep 2
+                done
+            '''
         }
+    }
+}
+
 
         stage('DAST - OWASP ZAP Scan') {
             steps {
