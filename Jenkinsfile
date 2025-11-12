@@ -5,8 +5,14 @@ pipeline {
         GIT_REPO = 'https://github.com/MACIB-GRUP3/Pokemon.git'
         SONAR_PROJECT_KEY = 'pokemon-php'
         SONAR_PROJECT_NAME = 'Pokemon PHP App'
-        APP_PORT = '8888'
-        ZAP_PORT = '8090'
+        
+        // Define la red creada por tu docker-compose
+        DOCKER_NETWORK = 'cicd-network' 
+        
+        // Estas variables ya no son necesarias para el pipeline,
+        // pero se pueden quedar si las usas para otra cosa.
+        // APP_PORT = '8888'
+        // ZAP_PORT = '8090'
     }
     
     triggers {
@@ -58,7 +64,8 @@ pipeline {
         stage('Quality Gate') {
             steps {
                 timeout(time: 5, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: false
+                    // abortPipeline: false -> Permite continuar para ver reportes
+                    waitForQualityGate abortPipeline: false 
                 }
             }
         }
@@ -71,41 +78,44 @@ pipeline {
                         docker stop pokemon-php-app 2>/dev/null || true
                         docker rm pokemon-php-app 2>/dev/null || true
                         
-                        echo "=== Creando red Docker si no existe ==="
-                        docker network create pokemon-network 2>/dev/null || true
+                        echo "=== Usando la red '${DOCKER_NETWORK}' existente ==="
                         
                         echo "=== Iniciando aplicación PHP en Docker ==="
+                        # No necesitamos exponer el puerto 8888, ZAP hablará
+                        # con la app por la red interna en el puerto 80.
                         docker run -d \
                             --name pokemon-php-app \
-                            --network pokemon-network \
-                            -p ${APP_PORT}:80 \
+                            --network ${DOCKER_NETWORK} \
                             -v ${WORKSPACE}:/var/www/html \
                             -w /var/www/html \
                             php:8.1-apache
-                        
+                            
                         echo "=== Esperando que el contenedor inicie ==="
                         sleep 5
                         
                         echo "=== Configurando Apache en el contenedor ==="
-                        docker exec pokemon-php-app bash -c "a2enmod rewrite && service apache2 restart" || true
+                        # Quitamos '|| true' para que el pipeline falle si esto falla
+                        docker exec pokemon-php-app bash -c "a2enmod rewrite && service apache2 restart"
                         
                         echo "=== Esperando que el servidor esté listo ==="
                         sleep 10
                         
-                        echo "=== Verificando que la aplicación responde ==="
-                        for i in 1 2 3 4 5 6 7 8 9 10; do
+                        echo "=== Verificando que la aplicación responde (dentro de la red docker) ==="
+                        for i in {1..10}; do
                             echo "Intento $i/10..."
-                            if curl -f -s http://localhost:${APP_PORT} > /dev/null 2>&1; then
+                            # Usamos una imagen de curl para verificar desde DENTRO de la red
+                            if docker run --rm --network ${DOCKER_NETWORK} appropriate/curl -f -s http://pokemon-php-app:80 > /dev/null 2>&1; then
                                 echo "✅ Aplicación respondiendo correctamente"
-                                exit 0
+                                exit 0 # Sale del script sh con éxito
                             else
                                 echo "⏳ Esperando respuesta del servidor..."
                                 sleep 3
                             fi
                         done
                         
-                        echo "⚠️  Advertencia: No se pudo verificar la respuesta de la app, pero continuando..."
+                        echo "❌ ERROR: No se pudo verificar la respuesta de la app."
                         docker logs pokemon-php-app
+                        exit 1 # Falla el pipeline
                     '''
                 }
             }
@@ -124,8 +134,9 @@ pipeline {
                         chmod -R 777 ${WORKSPACE}/zap-reports
                         
                         echo "=== Ejecutando OWASP ZAP Baseline Scan ==="
+                        # Conectamos ZAP a la misma red de la app
                         docker run --name zap-pokemon \
-                            --network pokemon-network \
+                            --network ${DOCKER_NETWORK} \
                             -v ${WORKSPACE}/zap-reports:/zap/wrk:rw \
                             -t ghcr.io/zaproxy/zaproxy:stable \
                             zap-baseline.py \
@@ -133,10 +144,13 @@ pipeline {
                             -r zap_report.html \
                             -w zap_report.md \
                             -J zap_report.json \
-                            -I || echo "⚠️  ZAP scan completado con advertencias"
+                            -I
+                        
+                        # ¡HEMOS QUITADO EL '|| echo ...'!
+                        # Si ZAP falla (código de salida != 0), el pipeline fallará aquí.
                         
                         echo "=== Verificando reportes generados ==="
-                        ls -lh ${WORKSPACE}/zap-reports/ || true
+                        ls -lh ${WORKSPACE}/zap-reports/
                         
                         echo "✅ Scan ZAP finalizado"
                     '''
@@ -176,7 +190,7 @@ pipeline {
                 script {
                     // Publicar reporte HTML de ZAP
                     publishHTML([
-                        allowMissing: true,
+                        allowMissing: true, // Ahora es seguro tenerlo en 'true'
                         alwaysLinkToLastBuild: true,
                         keepAll: true,
                         reportDir: 'zap-reports',
@@ -207,9 +221,6 @@ pipeline {
                     docker stop zap-pokemon 2>/dev/null || true
                     docker rm zap-pokemon 2>/dev/null || true
                     
-                    # Opcional: Limpiar red (comentado para evitar problemas si hay otros contenedores)
-                    # docker network rm pokemon-network 2>/dev/null || true
-                    
                     echo "✅ Limpieza completada"
                 '''
             }
@@ -217,11 +228,11 @@ pipeline {
         success {
             echo """
             ╔═══════════════════════════════════════════════════╗
-            ║  ✅ PIPELINE COMPLETADO EXITOSAMENTE             ║
+            ║  ✅ PIPELINE COMPLETADO EXITOSAMENTE              ║
             ╚═══════════════════════════════════════════════════╝
             
             📊 Revisa los reportes de seguridad:
-            ├─ SonarQube: http://localhost:9000
+            ├─ SonarQube: http://[IP-DE-TU-VM]:9000
             └─ ZAP Report: Disponible en los artefactos de Jenkins
             
             🔍 Proyecto SonarQube: ${SONAR_PROJECT_KEY}
@@ -230,14 +241,14 @@ pipeline {
         failure {
             echo """
             ╔═══════════════════════════════════════════════════╗
-            ║  ❌ EL PIPELINE HA FALLADO                       ║
+            ║  ❌ EL PIPELINE HA FALLADO                        ║
             ╚═══════════════════════════════════════════════════╝
             
             🔍 Revisa los logs de cada stage para identificar el problema
             💡 Verifica que:
-               - SonarQube esté funcionando (puerto 9000)
-               - Docker esté disponible en Jenkins
-               - Los puertos ${APP_PORT} y ${ZAP_PORT} estén libres
+                - SonarQube esté funcionando (puerto 9000)
+                - Docker esté disponible en Jenkins
+                - La red '${DOCKER_NETWORK}' exista
             """
         }
     }
