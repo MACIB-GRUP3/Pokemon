@@ -81,8 +81,6 @@ pipeline {
                         echo "=== Usando la red '${DOCKER_NETWORK}' existente ==="
                         
                         echo "=== Iniciando aplicación PHP en Docker ==="
-                        # No necesitamos exponer el puerto 8888, ZAP hablará
-                        # con la app por la red interna en el puerto 80.
                         docker run -d \
                             --name pokemon-php-app \
                             --network ${DOCKER_NETWORK} \
@@ -94,8 +92,11 @@ pipeline {
                         sleep 5
                         
                         echo "=== Configurando Apache en el contenedor ==="
-                        # Quitamos '|| true' para que el pipeline falle si esto falla
-                        docker exec pokemon-php-app bash -c "a2enmod rewrite && service apache2 restart"
+                        #
+                        # --- ESTA ES LA LÍNEA CORREGIDA ---
+                        # Usamos 'apache2ctl restart' en lugar de 'service apache2 restart'
+                        #
+                        docker exec pokemon-php-app bash -c "a2enmod rewrite && apache2ctl restart"
                         
                         echo "=== Esperando que el servidor esté listo ==="
                         sleep 10
