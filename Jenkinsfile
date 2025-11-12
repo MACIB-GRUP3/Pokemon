@@ -61,14 +61,13 @@ pipeline {
             }
         }
         
-        stage('Quality Gate') {
-            steps {
-                timeout(time: 5, unit: 'MINUTES') {
-                    // abortPipeline: false -> Permite continuar para ver reportes
-                    waitForQualityGate abortPipeline: false 
-                }
-            }
+stage('Quality Gate') {
+    steps {
+        timeout(time: 5, unit: 'MINUTES') {
+            waitForQualityGate abortPipeline: false //
         }
+    }
+}
         
  stage('Deploy PHP App for DAST') {
             steps {
