@@ -148,6 +148,9 @@ pipeline {
                         mkdir -p ${WORKSPACE}/zap-reports
                         chmod -R 777 ${WORKSPACE}/zap-reports
                         
+                        echo "=== Actualizando imagen de ZAP ==="
+                        docker pull ghcr.io/zaproxy/zaproxy:stable
+                        
                         echo "=== Ejecutando OWASP ZAP Baseline Scan (con path de HOST) ==="
                         echo "Host path para reportes: ${hostWorkspace}/zap-reports"
                         
