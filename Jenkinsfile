@@ -70,7 +70,7 @@ pipeline {
             }
         }
         
-        stage('Deploy PHP App for DAST') {
+ stage('Deploy PHP App for DAST') {
             steps {
                 script {
                     sh '''
@@ -94,9 +94,9 @@ pipeline {
                         echo "=== Configurando Apache en el contenedor ==="
                         #
                         # --- ESTA ES LA LÍNEA CORREGIDA ---
-                        # Usamos 'apache2ctl restart' en lugar de 'service apache2 restart'
+                        # Usamos 'apache2ctl graceful' (reinicio suave)
                         #
-                        docker exec pokemon-php-app bash -c "a2enmod rewrite && apache2ctl restart"
+                        docker exec pokemon-php-app bash -c "a2enmod rewrite && apache2ctl graceful"
                         
                         echo "=== Esperando que el servidor esté listo ==="
                         sleep 10
@@ -121,7 +121,6 @@ pipeline {
                 }
             }
         }
-        
         stage('DAST - OWASP ZAP Scan') {
             steps {
                 script {
