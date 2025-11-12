@@ -209,21 +209,22 @@ pipeline {
         }
     }
     
-    post {
+post {
         always {
-            script {
-                echo "=== Limpiando recursos ==="
-                sh '''
-                    # Detener y eliminar contenedor PHP
-                    docker stop pokemon-php-app 2>/dev/null || true
-                    docker rm pokemon-php-app 2>/dev/null || true
-                    
-                    # Detener y eliminar contenedor ZAP
-                    docker stop zap-pokemon 2>/dev/null || true
-                    docker rm zap-pokemon 2>/dev/null || true
-                    
-                    echo "✅ Limpieza completada"
-                '''
+            // AÑADE ESTE BLOQUE 'node'
+            node {
+                script {
+                    echo "=== Limpiando recursos ==="
+                    sh '''
+                        docker stop pokemon-php-app 2>/dev/null || true
+                        docker rm pokemon-php-app 2>/dev/null || true
+                        
+                        docker stop zap-pokemon 2>/dev/null || true
+                        docker rm zap-pokemon 2>/dev/null || true
+                        
+                        echo "✅ Limpieza completada"
+                    '''
+                }
             }
         }
         success {
