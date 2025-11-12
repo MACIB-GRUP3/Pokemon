@@ -208,25 +208,24 @@ pipeline {
             }
         }
     }
-    
-post {
+    post {
         always {
-            // AÑADE ESTE BLOQUE 'node'
-            node {
-                script {
-                    echo "=== Limpiando recursos ==="
-                    sh '''
-                        docker stop pokemon-php-app 2>/dev/null || true
-                        docker rm pokemon-php-app 2>/dev/null || true
-                        
-                        docker stop zap-pokemon 2>/dev/null || true
-                        docker rm zap-pokemon 2>/dev/null || true
-                        
-                        echo "✅ Limpieza completada"
-                    '''
-                }
-            }
+            // El 'node' y 'script' han sido eliminados.
+            // 'always' puede ejecutar pasos como 'echo' y 'sh' directamente.
+            echo "=== Limpiando recursos ==="
+            sh '''
+                # Detener y eliminar contenedor PHP
+                docker stop pokemon-php-app 2>/dev/null || true
+                docker rm pokemon-php-app 2>/dev/null || true
+                
+                # Detener y eliminar contenedor ZAP
+                docker stop zap-pokemon 2>/dev/null || true
+                docker rm zap-pokemon 2>/dev/null || true
+                
+                echo "✅ Limpieza completada"
+            '''
         }
+        
         success {
             echo """
             ╔═══════════════════════════════════════════════════╗
@@ -240,6 +239,7 @@ post {
             🔍 Proyecto SonarQube: ${SONAR_PROJECT_KEY}
             """
         }
+        
         failure {
             echo """
             ╔═══════════════════════════════════════════════════╗
