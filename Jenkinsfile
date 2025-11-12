@@ -73,18 +73,26 @@ pipeline {
  stage('Deploy PHP App for DAST') {
             steps {
                 script {
-                    sh '''
+                    // 1. TRADUCIR LA RUTA DEL CONTENEDOR A LA RUTA DEL HOST
+                    // Asume que tu usuario en la VM es 'grupo03'
+                    // ¡Si tu usuario es 'root' u otro, cámbialo aquí!
+                    def hostWorkspace = env.WORKSPACE.replaceFirst("/var/jenkins_home", "/home/grupo03/cicd-setup/jenkins_home")
+                    
+                    // 2. USAR LA RUTA DEL HOST EN EL SCRIPT SH
+                    // (Nota: usamos """...""" para que ${hostWorkspace} se expanda)
+                    sh """
                         echo "=== Deteniendo servidores PHP anteriores ==="
                         docker stop pokemon-php-app 2>/dev/null || true
                         docker rm pokemon-php-app 2>/dev/null || true
                         
                         echo "=== Usando la red '${DOCKER_NETWORK}' existente ==="
                         
-                        echo "=== Iniciando aplicación PHP en Docker ==="
+                        echo "=== Iniciando aplicación PHP en Docker (con path de HOST) ==="
+                        echo "Host path: ${hostWorkspace}"
                         docker run -d \
                             --name pokemon-php-app \
                             --network ${DOCKER_NETWORK} \
-                            -v ${WORKSPACE}:/var/www/html \
+                            -v ${hostWorkspace}:/var/www/html \
                             -w /var/www/html \
                             php:8.1-apache
                             
@@ -92,19 +100,18 @@ pipeline {
                         sleep 5
                         
                         echo "=== Configurando Apache en el contenedor ==="
-                        #
-                        # --- ESTA ES LA LÍNEA CORREGIDA ---
-                        # Usamos 'apache2ctl graceful' (reinicio suave)
-                        #
                         docker exec pokemon-php-app bash -c "a2enmod rewrite && apache2ctl graceful"
                         
                         echo "=== Esperando que el servidor esté listo ==="
                         sleep 10
                         
                         echo "=== Verificando que la aplicación responde (dentro de la red docker) ==="
-                        for i in {1..10}; do
-                            echo "Intento $i/10..."
-                            # Usamos una imagen de curl para verificar desde DENTRO de la red
+                        
+                        # --- 3. BUCLE 'for' CORREGIDO (sintaxis 'while' para 'sh') ---
+                        # (Nota: '\$i' es necesario para que Groovy no lo intente evaluar)
+                        i=1
+                        while [ \$i -le 10 ]; do
+                            echo "Intento \$i/10..."
                             if docker run --rm --network ${DOCKER_NETWORK} appropriate/curl -f -s http://pokemon-php-app:80 > /dev/null 2>&1; then
                                 echo "✅ Aplicación respondiendo correctamente"
                                 exit 0 # Sale del script sh con éxito
@@ -112,12 +119,13 @@ pipeline {
                                 echo "⏳ Esperando respuesta del servidor..."
                                 sleep 3
                             fi
+                            i=\$((i + 1))
                         done
                         
                         echo "❌ ERROR: No se pudo verificar la respuesta de la app."
                         docker logs pokemon-php-app
                         exit 1 # Falla el pipeline
-                    '''
+                    """
                 }
             }
         }
