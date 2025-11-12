@@ -130,82 +130,47 @@ pipeline {
             }
         }
 stage('DAST - OWASP ZAP Scan') {
-
             steps {
-
                 script {
-
                     // 1. TRADUCIR LA RUTA DEL CONTENEDOR A LA RUTA DEL HOST
-
                     // (¡Asegúrate de que 'grupo03' es tu usuario en la VM!)
-
                     def hostWorkspace = env.WORKSPACE.replaceFirst("/var/jenkins_home", "/home/grupo03/cicd-setup/jenkins_home")
+
                     // 2. USAR LA RUTA DEL HOST EN EL SCRIPT SH
-
                     sh """
-
                         echo "=== Limpiando contenedores ZAP anteriores ==="
-
                         docker stop zap-pokemon 2>/dev/null || true
-
                         docker rm zap-pokemon 2>/dev/null || true
-
+                        
                         echo "=== Creando directorio para reportes (desde Jenkins) ==="
-
-                        # Este mkdir usa la ruta de Jenkins, lo cual está BIEN,
-
-                        # porque Jenkins (root) crea el dir en la VM con 'chmod 777'
-
                         mkdir -p ${WORKSPACE}/zap-reports
-
                         chmod -R 777 ${WORKSPACE}/zap-reports
-
                         
-
+                        echo "=== Actualizando imagen de ZAP ==="
+                        docker pull ghcr.io/zaproxy/zaproxy:stable
+                        
                         echo "=== Ejecutando OWASP ZAP Baseline Scan (con path de HOST) ==="
-
                         echo "Host path para reportes: ${hostWorkspace}/zap-reports"
-
                         
-
-                        # 3. USAR EL HOST PATH EN EL VOLUMEN
-
+                        # 3. COMANDO COMPLETO (¡ASEGÚRATE DE COPIARLO TODO!)
                         docker run --name zap-pokemon \
-
                             --network ${DOCKER_NETWORK} \
-
                             -v ${hostWorkspace}/zap-reports:/zap/wrk:rw \
-
                             -t ghcr.io/zaproxy/zaproxy:stable \
-
                             zap-baseline.py \
-
                             -t http://pokemon-php-app:80 \
-
                             -r zap_report.html \
-
                             -w zap_report.md \
-
                             -J zap_report.json \
-
                             -I
-
                         
-
                         echo "=== Verificando reportes generados ==="
-
                         ls -lh ${WORKSPACE}/zap-reports/
-
                         
-
                         echo "✅ Scan ZAP finalizado"
-
                     """
-
                 }
-
             }
-
         }
         stage('Security Analysis - PHP Specific') {
             steps {
