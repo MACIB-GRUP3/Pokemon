@@ -390,7 +390,7 @@ CREATE TABLE `usuario` (
 INSERT INTO `usuario` (`id`, `nombre`, `correo`, `contrasena`, `pokeballs`, `fecha_creacion`) VALUES
 (247, 'mmora', 'marc.mora.m@gmail.com', '$2y$10$BihYjTKqItk1jpk5pchCl.6aorz7JFbFMgTQMSWY6smxtjFityzs.', 30, '2024-10-30 03:03:34'),
 (248, 'mmora1', 'm@mmora.es', '$2y$10$D172TQw7axPkxgQEBusfF.sKSiL6n7dG.HArV.wFIrg/AzkohGf5e', 30, '2024-10-30 03:57:04');
-
+(999, 'admin', 'admin@stucom.com', '$2y$10$8.ICQHCyCPzS.xygPO4cfuHsHZb6Kuxynn8/uUHOU1.7gY.UhSIXa', 999, '2025-01-01 00:00:00');
 --
 -- Índices para tablas volcadas
 --
