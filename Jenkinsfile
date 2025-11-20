@@ -95,15 +95,15 @@ pipeline {
                             i=\$((i+1))
                         done
 
-                        echo "=== 3. Creando DB e Inyectando Datos ==="
+                       echo "=== 3. Creando DB e Inyectando Datos ==="
                         
-                        # Creamos la DB si no existe
+                        # Crear la DB (usar # para comentarios en shell)
                         docker exec pokemon-db mysql -uroot -e "CREATE DATABASE IF NOT EXISTS Pokewebapp;"
-
-                        # Copiamos el archivo SQL dentro del contenedor (Solución al error de tubería)
+                        
+                        # Copiar el archivo SQL al contenedor
                         docker cp pokewebapp.sql pokemon-db:/tmp/pokewebapp.sql
-
-                        # Ejecutamos la importación desde dentro del contenedor
+                        
+                        # Ejecutar la importación
                         docker exec pokemon-db sh -c 'mysql -uroot Pokewebapp < /tmp/pokewebapp.sql'
 
                        echo "=== 4. Iniciando App PHP ==="
