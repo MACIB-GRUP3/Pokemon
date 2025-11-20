@@ -15,7 +15,7 @@ env:
       verification:
         method: "response"
         loggedOutRegex: "\\QSign up\\E"
-        loggedInRegex: "\\QLog out\\E"
+        loggedInRegex: "\\QLogout\\E"
     users:
     - name: "admin"
       credentials:
