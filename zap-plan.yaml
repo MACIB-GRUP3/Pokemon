@@ -1,0 +1,44 @@
+env:
+  contexts:
+  - name: "Pokemon Context"
+    urls:
+    - "http://pokemon-php-app:80"
+    includePaths:
+    - "http://pokemon-php-app:80.*"
+    excludePaths: []
+    authentication:
+      method: "form"
+      parameters:
+        loginPageUrl: "http://pokemon-php-app:80/signin.php"
+        # IMPORTANTE: Verifica en tu 'signin.php' si los campos se llaman 'email' y 'password'
+        loginRequestUrl: "http://pokemon-php-app:80/php/mysqlSignIn.php" 
+        loginRequestBody: "email={%username%}&password={%password%}"
+    verification:
+      method: "response"
+      loggedOutMatchRegex: "\\QSign in\\E"  # Texto que SOLO sale si NO estás logueado
+      loggedInMatchRegex: "\\QAdmin Panel\\E" # Texto que SOLO sale si ESTÁS logueado (admin.php)
+    users:
+    - name: "admin"
+      credentials:
+        username: "admin@stucom.com"
+        password: "password123" # ¡PON AQUÍ LA CONTRASEÑA REAL DE TU BASE DE DATOS!
+    sessionManagement:
+      method: "cookie"
+  parameters:
+    failOnError: false
+    progressToStdout: true
+
+jobs:
+- type: "spider"
+  parameters:
+    user: "admin" # Usa el usuario definido arriba
+    maxDuration: 1
+- type: "passiveScan-wait"
+  parameters:
+    maxDuration: 0
+- type: "report"
+  parameters:
+    template: "traditional-html"
+    reportDir: "/zap/wrk"
+    reportFile: "zap_report.html"
+    reportTitle: "ZAP Security Report (Authenticated)"
