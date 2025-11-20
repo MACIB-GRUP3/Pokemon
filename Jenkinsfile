@@ -63,38 +63,52 @@ pipeline {
         stage('Deploy PHP App for DAST') {
             steps {
                 script {
-                    // Define la ruta del host para los volúmenes
-                    // ¡ASEGÚRATE DE QUE 'grupo03' ES TU USUARIO CORRECTO EN LA VM!
                     def hostWorkspace = env.WORKSPACE.replaceFirst("/var/jenkins_home", "/home/grupo03/cicd-setup/jenkins_home")
 
                     sh """
                         echo "=== 0. Limpiando entorno anterior ==="
                         docker stop pokemon-db pokemon-php-app 2>/dev/null || true
                         docker rm pokemon-db pokemon-php-app 2>/dev/null || true
+                        
+                        # Aseguramos que la red existe
+                        docker network create cicd-network 2>/dev/null || true
 
-                        echo "=== 1. Parcheando conexión a DB (DevOps Magic) ==="
-                        # Cambiamos 'localhost' por 'pokemon-db' en todos los PHP para que funcione en Docker
-                        # Esto evita que tengas que cambiar el código a mano
+                        echo "=== 1. Parcheando conexión a DB ==="
                         grep -rl "localhost" . | xargs sed -i 's/localhost/pokemon-db/g' || true
 
                         echo "=== 2. Iniciando Base de Datos (MySQL) ==="
-                        docker run -d \
-                            --name pokemon-db \
-                            --network ${DOCKER_NETWORK} \
-                            --health-cmd='mysqladmin ping --silent' \
-                            -e MYSQL_ROOT_PASSWORD= \
-                            -e MYSQL_ALLOW_EMPTY_PASSWORD=yes \
-                            -e MYSQL_DATABASE=Pokewebapp \
-                            -v ${hostWorkspace}/pokewebapp.sql:/docker-entrypoint-initdb.d/init.sql \
+                        docker run -d \\
+                            --name pokemon-db \\
+                            --network ${DOCKER_NETWORK} \\
+                            --health-cmd='mysqladmin ping -h localhost -u root --silent' \\
+                            --health-interval=5s \\
+                            --health-retries=10 \\
+                            -e MYSQL_ROOT_PASSWORD= \\
+                            -e MYSQL_ALLOW_EMPTY_PASSWORD=yes \\
+                            -e MYSQL_DATABASE=Pokewebapp \\
+                            -v ${hostWorkspace}/pokewebapp.sql:/docker-entrypoint-initdb.d/init.sql \\
                             mysql:5.7
 
-                        echo "⏳ Esperando a que la DB arranque (Dándole 30s)..."
-                        sleep 30 
-                        
-                        # Comprobación de vida
-                        docker ps | grep pokemon-db && echo "✅ DB está corriendo" || echo "❌ DB MURIÓ"
-                        echo "⏳ Esperando a que la DB arranque..."
-                        sleep 15
+                        echo "⏳ Esperando a que MySQL esté listo (Healthcheck Loop)..."
+                        # Bucle de espera inteligente: Esperamos hasta que MySQL responda 'alive'
+                        n=0
+                        until [ \$n -ge 20 ]
+                        do
+                            if docker exec pokemon-db mysqladmin ping -h localhost --silent; then
+                                echo "✅ ¡Base de datos lista!"
+                                break
+                            fi
+                            echo "😴 MySQL cargando... (Intento \$n/20)"
+                            n=\$((n+1))
+                            sleep 3
+                        done
+
+                        # Verificación final de seguridad
+                        if [ \$n -ge 20 ]; then
+                            echo "❌ ERROR: La base de datos no arrancó a tiempo."
+                            docker logs pokemon-db
+                            exit 1
+                        fi
 
                         echo "=== 3. Iniciando App PHP ==="
                         docker run -d \\
@@ -106,14 +120,10 @@ pipeline {
 
                         echo "=== Configurando Apache y Extensiones ==="
                         sleep 5
-                        # Instalamos mysqli porque la imagen oficial a veces no lo trae activado por defecto
-                        docker exec pokemon-php-app bash -c "docker-php-ext-install mysqli && docker-php-ext-enable mysqli && a2enmod rewrite && apache2ctl graceful"
+                        # Importante: Instalamos mysqli y activamos headers
+                        docker exec pokemon-php-app bash -c "docker-php-ext-install mysqli && docker-php-ext-enable mysqli && a2enmod rewrite headers && apache2ctl graceful"
 
-                        echo "⏳ Esperando que la web esté lista..."
-                        sleep 10
-
-                        echo "=== Verificando conexión ==="
-                        docker run --rm --network ${DOCKER_NETWORK} appropriate/curl -f -s http://pokemon-php-app:80 > /dev/null && echo "✅ Web Arriba" || echo "❌ Web Caída"
+                        echo "✅ Entorno desplegado y listo para el ataque"
                     """
                 }
             }
