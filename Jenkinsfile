@@ -113,6 +113,7 @@ pipeline {
                 }
             }
         }
+        
        stage('DAST - OWASP ZAP Scan') {
             steps {
                 script {
@@ -139,6 +140,7 @@ pipeline {
                 }
             }
         }
+        
         stage('Security Analysis - PHP Specific') {
             steps {
                 script {
