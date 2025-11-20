@@ -10,18 +10,23 @@ env:
       method: "form"
       parameters:
         loginPageUrl: "http://pokemon-php-app:80/signin.php"
-        # IMPORTANTE: Verifica en tu 'signin.php' si los campos se llaman 'email' y 'password'
-        loginRequestUrl: "http://pokemon-php-app:80/php/mysqlSignIn.php" 
-        loginRequestBody: "email={%username%}&password={%password%}"
+        # Asegúrate de que esta URL es a donde apunta el <form action="..."> de tu signin.php
+        # Si el form se envía a sí mismo, pon "http://pokemon-php-app:80/signin.php"
+        loginRequestUrl: "http://pokemon-php-app:80/signin.php" 
+        # AQUÍ ESTÁ EL CAMBIO CLAVE: usamos 'pwd' en vez de 'password'
+        loginRequestBody: "email={%username%}&pwd={%password%}"
     verification:
       method: "response"
-      loggedOutMatchRegex: "\\QSign in\\E"  # Texto que SOLO sale si NO estás logueado
-      loggedInMatchRegex: "\\QAdmin Panel\\E" # Texto que SOLO sale si ESTÁS logueado (admin.php)
+      # Algo que SOLO sale cuando NO estás logueado (ej: el botón de registrarse)
+      loggedOutMatchRegex: "\\QSign up\\E"  
+      # Algo que SOLO sale cuando ESTÁS logueado (ej: el botón de salir o perfil)
+      loggedInMatchRegex: "\\QLog out\\E" 
     users:
     - name: "admin"
       credentials:
         username: "admin@stucom.com"
-        password: "password123" # ¡PON AQUÍ LA CONTRASEÑA REAL DE TU BASE DE DATOS!
+        # ¡IMPORTANTE! Pon la contraseña real que tenga este usuario en tu base de datos
+        password: "password123" 
     sessionManagement:
       method: "cookie"
   parameters:
@@ -31,7 +36,7 @@ env:
 jobs:
 - type: "spider"
   parameters:
-    user: "admin" # Usa el usuario definido arriba
+    user: "admin"
     maxDuration: 1
 - type: "passiveScan-wait"
   parameters:
@@ -41,4 +46,4 @@ jobs:
     template: "traditional-html"
     reportDir: "/zap/wrk"
     reportFile: "zap_report.html"
-    reportTitle: "ZAP Security Report (Authenticated)"
+    reportTitle: "ZAP Security Report"
