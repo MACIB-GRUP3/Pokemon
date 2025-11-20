@@ -10,23 +10,18 @@ env:
       method: "form"
       parameters:
         loginPageUrl: "http://pokemon-php-app:80/signin.php"
-        # Asegúrate de que esta URL es a donde apunta el <form action="..."> de tu signin.php
-        # Si el form se envía a sí mismo, pon "http://pokemon-php-app:80/signin.php"
         loginRequestUrl: "http://pokemon-php-app:80/signin.php" 
-        # AQUÍ ESTÁ EL CAMBIO CLAVE: usamos 'pwd' en vez de 'password'
         loginRequestBody: "email={%username%}&pwd={%password%}"
-    verification:
-      method: "response"
-      # Algo que SOLO sale cuando NO estás logueado (ej: el botón de registrarse)
-      loggedOutMatchRegex: "\\QSign up\\E"  
-      # Algo que SOLO sale cuando ESTÁS logueado (ej: el botón de salir o perfil)
-      loggedInMatchRegex: "\\QLog out\\E" 
+      # --- CORRECCIÓN AQUÍ: 'verification' ahora está DENTRO de 'authentication' ---
+      verification:
+        method: "response"
+        loggedOutMatchRegex: "\\QSign up\\E"
+        loggedInMatchRegex: "\\QLog out\\E"
     users:
     - name: "admin"
       credentials:
         username: "admin@stucom.com"
-        # ¡IMPORTANTE! Pon la contraseña real que tenga este usuario en tu base de datos
-        password: "password123" 
+        password: "password123"
     sessionManagement:
       method: "cookie"
   parameters:
