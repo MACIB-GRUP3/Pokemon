@@ -96,28 +96,30 @@ pipeline {
                         done
 
                         echo "=== 3. Creando DB e Inyectando Datos ==="
-                        # FIX: Creamos la DB explícitamente por si acaso Docker no lo ha hecho aún
-                        docker exec pokemon-db mysql -uroot -e "CREATE DATABASE IF NOT EXISTS Pokewebapp;"
-                        
-                        # Inyectamos los datos asegurando que la DB existe
-                        cat pokewebapp.sql | docker exec -i pokemon-db mysql -uroot Pokewebapp
+                       // Copy the file into the container first
+                       sh "docker cp pokewebapp.sql pokemon-db:/tmp/pokewebapp.sql"
 
-                        echo "=== 4. Iniciando App PHP ==="
-                        docker run -d \\
-                            --name pokemon-php-app \\
-                            --network cicd-network \\
-                            -v ${hostWorkspace}:/var/www/html \\
-                            -w /var/www/html \\
-                            php:8.1-apache
+                       // Execute it from inside the container
+                       sh "docker exec pokemon-db sh -c 'mysql -uroot Pokewebapp < /tmp/pokewebapp.sql'"
+                       # Inyectamos los datos asegurando que la DB existe
+                       cat pokewebapp.sql | docker exec -i pokemon-db mysql -uroot Pokewebapp
 
-                        echo "=== 5. Configurando Apache ==="
-                        sleep 5
-                        docker exec pokemon-php-app bash -c "docker-php-ext-install mysqli && docker-php-ext-enable mysqli && a2enmod rewrite headers && apache2ctl graceful"
+                       echo "=== 4. Iniciando App PHP ==="
+                       docker run -d \\
+                           --name pokemon-php-app \\
+                           --network cicd-network \\
+                           -v ${hostWorkspace}:/var/www/html \\
+                           -w /var/www/html \\
+                           php:8.1-apache
 
-                        echo "=== 6. Verificación Final ==="
-                        sleep 5
-                        docker run --rm --network cicd-network appropriate/curl -f -s http://pokemon-php-app:80 > /dev/null && echo "🚀 TODO LISTO" || echo "❌ ERROR: La web no responde"
-                    """
+                       echo "=== 5. Configurando Apache ==="
+                       sleep 5
+                       docker exec pokemon-php-app bash -c "docker-php-ext-install mysqli && docker-php-ext-enable mysqli && a2enmod rewrite headers && apache2ctl graceful"
+
+                       echo "=== 6. Verificación Final ==="
+                       sleep 5
+                       docker run --rm --network cicd-network appropriate/curl -f -s http://pokemon-php-app:80 > /dev/null && echo "🚀 TODO LISTO" || echo "❌ ERROR: La web no responde"
+                      """
                 }
             }
         }
