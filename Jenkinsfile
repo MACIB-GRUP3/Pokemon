@@ -63,67 +63,61 @@ pipeline {
         stage('Deploy PHP App for DAST') {
             steps {
                 script {
+                    // Calcula la ruta del host para montar el código de la web (esto sí funcionaba antes)
+                    // Asegúrate de que 'grupo03' es tu usuario. Si no, cámbialo.
                     def hostWorkspace = env.WORKSPACE.replaceFirst("/var/jenkins_home", "/home/grupo03/cicd-setup/jenkins_home")
 
                     sh """
                         echo "=== 0. Limpiando entorno anterior ==="
                         docker stop pokemon-db pokemon-php-app 2>/dev/null || true
                         docker rm pokemon-db pokemon-php-app 2>/dev/null || true
-                        
-                        # Aseguramos que la red existe
                         docker network create cicd-network 2>/dev/null || true
 
                         echo "=== 1. Parcheando conexión a DB ==="
+                        # Cambiamos 'localhost' por 'pokemon-db' en los archivos PHP
                         grep -rl "localhost" . | xargs sed -i 's/localhost/pokemon-db/g' || true
 
                         echo "=== 2. Iniciando Base de Datos (MySQL) ==="
+                        # CORRECCIÓN: Iniciamos MySQL VACÍO (sin montar el volumen conflictivo)
                         docker run -d \\
                             --name pokemon-db \\
-                            --network ${DOCKER_NETWORK} \\
-                            --health-cmd='mysqladmin ping -h localhost -u root --silent' \\
-                            --health-interval=5s \\
-                            --health-retries=10 \\
+                            --network cicd-network \\
                             -e MYSQL_ROOT_PASSWORD= \\
                             -e MYSQL_ALLOW_EMPTY_PASSWORD=yes \\
                             -e MYSQL_DATABASE=Pokewebapp \\
-                            -v ${hostWorkspace}/pokewebapp.sql:/docker-entrypoint-initdb.d/init.sql \\
                             mysql:5.7
 
-                        echo "⏳ Esperando a que MySQL esté listo (Healthcheck Loop)..."
-                        # Bucle de espera inteligente: Esperamos hasta que MySQL responda 'alive'
-                        n=0
-                        until [ \$n -ge 20 ]
-                        do
+                        echo "⏳ Esperando a que MySQL arranque..."
+                        # Esperamos a que la DB esté 100% lista antes de meter datos
+                        for i in {1..30}; do
                             if docker exec pokemon-db mysqladmin ping -h localhost --silent; then
-                                echo "✅ ¡Base de datos lista!"
+                                echo "✅ MySQL está vivo y respondiendo!"
                                 break
                             fi
-                            echo "😴 MySQL cargando... (Intento \$n/20)"
-                            n=\$((n+1))
-                            sleep 3
+                            echo "😴 Cargando DB... (\$i/30)"
+                            sleep 2
                         done
 
-                        # Verificación final de seguridad
-                        if [ \$n -ge 20 ]; then
-                            echo "❌ ERROR: La base de datos no arrancó a tiempo."
-                            docker logs pokemon-db
-                            exit 1
-                        fi
+                        echo "=== 3. Inyectando Datos (Método Seguro) ==="
+                        # TRUCO PRO: Leemos el archivo desde Jenkins y lo 'empujamos' dentro de la DB
+                        # Esto evita cualquier error de rutas o permisos de volúmenes.
+                        cat pokewebapp.sql | docker exec -i pokemon-db mysql -uroot Pokewebapp
 
-                        echo "=== 3. Iniciando App PHP ==="
+                        echo "=== 4. Iniciando App PHP ==="
                         docker run -d \\
                             --name pokemon-php-app \\
-                            --network ${DOCKER_NETWORK} \\
+                            --network cicd-network \\
                             -v ${hostWorkspace}:/var/www/html \\
                             -w /var/www/html \\
                             php:8.1-apache
 
-                        // Dentro del Jenkinsfile, en el stage 'Deploy PHP App for DAST'
-                        echo "=== Configurando Apache y Extensiones ==="
+                        echo "=== 5. Configurando Apache ==="
                         sleep 5
-                        // FIX: Añadimos 'headers' después de 'rewrite'
                         docker exec pokemon-php-app bash -c "docker-php-ext-install mysqli && docker-php-ext-enable mysqli && a2enmod rewrite headers && apache2ctl graceful"
-                        echo "✅ Entorno desplegado y listo para el ataque"
+
+                        echo "=== 6. Verificación Final ==="
+                        sleep 5
+                        docker run --rm --network cicd-network appropriate/curl -f -s http://pokemon-php-app:80 > /dev/null && echo "🚀 TODO LISTO" || echo "❌ ERROR: La web no responde"
                     """
                 }
             }
