@@ -97,15 +97,14 @@ pipeline {
 
                        echo "=== 3. Creando DB e Inyectando Datos ==="
                         
-                        # Crear la DB (usar # para comentarios en shell)
-                        docker exec pokemon-db mysql -uroot -e "CREATE DATABASE IF NOT EXISTS Pokewebapp;"
-                        
-                        # Copiar el archivo SQL al contenedor
-                        docker cp pokewebapp.sql pokemon-db:/tmp/pokewebapp.sql
-                        
-                        # Ejecutar la importación
-                        docker exec pokemon-db sh -c 'mysql -uroot Pokewebapp < /tmp/pokewebapp.sql'
+                       # Crear la base de datos
+                       docker exec pokemon-db mysql -uroot -e "CREATE DATABASE IF NOT EXISTS Pokewebapp;"
 
+                       # Copiar el archivo SQL al contenedor
+                       docker cp pokewebapp.sql pokemon-db:/tmp/pokewebapp.sql
+
+                       # CORRECCIÓN: Usar 'source' en lugar de redirección '<' para evitar el Error 1317
+                       docker exec pokemon-db mysql -uroot Pokewebapp -e "source /tmp/pokewebapp.sql"
                        echo "=== 4. Iniciando App PHP ==="
                        docker run -d \\
                            --name pokemon-php-app \\
