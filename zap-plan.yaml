@@ -12,11 +12,10 @@ env:
         loginPageUrl: "http://pokemon-php-app:80/signin.php"
         loginRequestUrl: "http://pokemon-php-app:80/signin.php" 
         loginRequestBody: "email={%username%}&pwd={%password%}"
-      # --- CORRECCIÓN AQUÍ: 'verification' ahora está DENTRO de 'authentication' ---
       verification:
         method: "response"
-        loggedOutMatchRegex: "\\QSign up\\E"
-        loggedInMatchRegex: "\\QLog out\\E"
+        loggedOutRegex: "\\QSign up\\E"
+        loggedInRegex: "\\QLog out\\E"
     users:
     - name: "admin"
       credentials:
