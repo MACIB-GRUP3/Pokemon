@@ -63,8 +63,7 @@ pipeline {
         stage('Deploy PHP App for DAST') {
             steps {
                 script {
-                    // Calcula la ruta del host para montar el código de la web (esto sí funcionaba antes)
-                    // Asegúrate de que 'grupo03' es tu usuario. Si no, cámbialo.
+                    // Ruta del host (asegúrate que 'grupo03' es correcto)
                     def hostWorkspace = env.WORKSPACE.replaceFirst("/var/jenkins_home", "/home/grupo03/cicd-setup/jenkins_home")
 
                     sh """
@@ -74,11 +73,9 @@ pipeline {
                         docker network create cicd-network 2>/dev/null || true
 
                         echo "=== 1. Parcheando conexión a DB ==="
-                        # Cambiamos 'localhost' por 'pokemon-db' en los archivos PHP
                         grep -rl "localhost" . | xargs sed -i 's/localhost/pokemon-db/g' || true
 
                         echo "=== 2. Iniciando Base de Datos (MySQL) ==="
-                        # CORRECCIÓN: Iniciamos MySQL VACÍO (sin montar el volumen conflictivo)
                         docker run -d \\
                             --name pokemon-db \\
                             --network cicd-network \\
@@ -87,20 +84,23 @@ pipeline {
                             -e MYSQL_DATABASE=Pokewebapp \\
                             mysql:5.7
 
-                        echo "⏳ Esperando a que MySQL arranque..."
-                        # Esperamos a que la DB esté 100% lista antes de meter datos
-                        for i in {1..30}; do
+                        echo "⏳ Esperando a que MySQL arranque (Bucle compatible)..."
+                        
+                        # --- FIX: Bucle compatible con Jenkins 'sh' ---
+                        i=0
+                        while [ \$i -lt 30 ]; do
                             if docker exec pokemon-db mysqladmin ping -h localhost --silent; then
                                 echo "✅ MySQL está vivo y respondiendo!"
                                 break
                             fi
                             echo "😴 Cargando DB... (\$i/30)"
                             sleep 2
+                            i=\$((i+1))
                         done
+                        # -----------------------------------------------
 
-                        echo "=== 3. Inyectando Datos (Método Seguro) ==="
-                        # TRUCO PRO: Leemos el archivo desde Jenkins y lo 'empujamos' dentro de la DB
-                        # Esto evita cualquier error de rutas o permisos de volúmenes.
+                        echo "=== 3. Inyectando Datos ==="
+                        # Ahora sí funcionará porque hemos esperado
                         cat pokewebapp.sql | docker exec -i pokemon-db mysql -uroot Pokewebapp
 
                         echo "=== 4. Iniciando App PHP ==="
