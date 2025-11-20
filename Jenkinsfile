@@ -78,16 +78,21 @@ pipeline {
                         grep -rl "localhost" . | xargs sed -i 's/localhost/pokemon-db/g' || true
 
                         echo "=== 2. Iniciando Base de Datos (MySQL) ==="
-                        # Montamos el SQL para que se carguen los usuarios automáticamente
-                        docker run -d \\
-                            --name pokemon-db \\
-                            --network ${DOCKER_NETWORK} \\
-                            -e MYSQL_ROOT_PASSWORD= \\
-                            -e MYSQL_ALLOW_EMPTY_PASSWORD=yes \\
-                            -e MYSQL_DATABASE=Pokewebapp \\
-                            -v ${hostWorkspace}/pokewebapp.sql:/docker-entrypoint-initdb.d/init.sql \\
+                        docker run -d \
+                            --name pokemon-db \
+                            --network ${DOCKER_NETWORK} \
+                            --health-cmd='mysqladmin ping --silent' \
+                            -e MYSQL_ROOT_PASSWORD= \
+                            -e MYSQL_ALLOW_EMPTY_PASSWORD=yes \
+                            -e MYSQL_DATABASE=Pokewebapp \
+                            -v ${hostWorkspace}/pokewebapp.sql:/docker-entrypoint-initdb.d/init.sql \
                             mysql:5.7
 
+                        echo "⏳ Esperando a que la DB arranque (Dándole 30s)..."
+                        sleep 30 
+                        
+                        # Comprobación de vida
+                        docker ps | grep pokemon-db && echo "✅ DB está corriendo" || echo "❌ DB MURIÓ"
                         echo "⏳ Esperando a que la DB arranque..."
                         sleep 15
 
