@@ -118,11 +118,11 @@ pipeline {
                             -w /var/www/html \\
                             php:8.1-apache
 
+                        // Dentro del Jenkinsfile, en el stage 'Deploy PHP App for DAST'
                         echo "=== Configurando Apache y Extensiones ==="
                         sleep 5
-                        # Importante: Instalamos mysqli y activamos headers
+                        // FIX: Añadimos 'headers' después de 'rewrite'
                         docker exec pokemon-php-app bash -c "docker-php-ext-install mysqli && docker-php-ext-enable mysqli && a2enmod rewrite headers && apache2ctl graceful"
-
                         echo "✅ Entorno desplegado y listo para el ataque"
                     """
                 }
