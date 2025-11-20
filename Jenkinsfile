@@ -63,7 +63,6 @@ pipeline {
         stage('Deploy PHP App for DAST') {
             steps {
                 script {
-                    // Ruta del host (asegúrate que 'grupo03' es correcto)
                     def hostWorkspace = env.WORKSPACE.replaceFirst("/var/jenkins_home", "/home/grupo03/cicd-setup/jenkins_home")
 
                     sh """
@@ -81,26 +80,26 @@ pipeline {
                             --network cicd-network \\
                             -e MYSQL_ROOT_PASSWORD= \\
                             -e MYSQL_ALLOW_EMPTY_PASSWORD=yes \\
-                            -e MYSQL_DATABASE=Pokewebapp \\
                             mysql:5.7
 
-                        echo "⏳ Esperando a que MySQL arranque (Bucle compatible)..."
+                        echo "⏳ Esperando a que MySQL arranque..."
                         
-                        # --- FIX: Bucle compatible con Jenkins 'sh' ---
                         i=0
                         while [ \$i -lt 30 ]; do
                             if docker exec pokemon-db mysqladmin ping -h localhost --silent; then
-                                echo "✅ MySQL está vivo y respondiendo!"
+                                echo "✅ MySQL está vivo!"
                                 break
                             fi
-                            echo "😴 Cargando DB... (\$i/30)"
+                            echo "😴 Esperando socket... (\$i/30)"
                             sleep 2
                             i=\$((i+1))
                         done
-                        # -----------------------------------------------
 
-                        echo "=== 3. Inyectando Datos ==="
-                        # Ahora sí funcionará porque hemos esperado
+                        echo "=== 3. Creando DB e Inyectando Datos ==="
+                        # FIX: Creamos la DB explícitamente por si acaso Docker no lo ha hecho aún
+                        docker exec pokemon-db mysql -uroot -e "CREATE DATABASE IF NOT EXISTS Pokewebapp;"
+                        
+                        # Inyectamos los datos asegurando que la DB existe
                         cat pokewebapp.sql | docker exec -i pokemon-db mysql -uroot Pokewebapp
 
                         echo "=== 4. Iniciando App PHP ==="
