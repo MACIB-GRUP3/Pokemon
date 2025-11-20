@@ -113,8 +113,7 @@ pipeline {
                 }
             }
         }
-
-        stage('DAST - OWASP ZAP Scan') {
+       stage('DAST - OWASP ZAP Scan') {
             steps {
                 script {
                     def hostWorkspace = env.WORKSPACE.replaceFirst("/var/jenkins_home", "/home/grupo03/cicd-setup/jenkins_home")
@@ -126,25 +125,20 @@ pipeline {
                         mkdir -p ${WORKSPACE}/zap-reports
                         chmod -R 777 ${WORKSPACE}/zap-reports
                         
-                        echo "=== Ejecutando OWASP ZAP ==="
-                        # Ahora ZAP podrá loguearse porque la DB tiene usuarios
+                        echo "=== Ejecutando OWASP ZAP (Autenticado) ==="
+                        # Montamos el archivo zap-plan.yaml dentro del contenedor
                         docker run --name zap-pokemon \\
                             --network ${DOCKER_NETWORK} \\
                             -v ${hostWorkspace}/zap-reports:/zap/wrk:rw \\
+                            -v ${hostWorkspace}/zap-plan.yaml:/zap/plan.yaml:ro \\
                             -t ghcr.io/zaproxy/zaproxy:stable \\
-                            zap-baseline.py \\
-                            -t http://pokemon-php-app:80 \\
-                            -r zap_report.html \\
-                            -w zap_report.md \
-                            -J zap_report.json \
-                            -I || true 
+                            zap.sh -cmd -autorun /zap/plan.yaml
                         
                         echo "✅ Scan finalizado"
                     """
                 }
             }
         }
-
         stage('Security Analysis - PHP Specific') {
             steps {
                 script {
