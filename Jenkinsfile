@@ -78,14 +78,16 @@ pipeline {
 
                         echo "⏳ Esperando a que MySQL arranque..."
                         i=0
-                        while [ $i -lt 30 ]; do
+                        while [ \$i -lt 30 ]; do   // <--- Asegúrate de escapar también aquí si usas """
                             if docker exec pokemon-db mysqladmin ping -h localhost --silent; then
                                 echo "✅ MySQL está vivo!"
                                 break
                             fi
-                            echo "😴 Esperando socket... ($i/30)"
+                            echo "😴 Esperando socket... (\$i/30)"
                             sleep 2
-                            i=$((i+1))
+                            
+                            # CORRECCIÓN AQUÍ: Escapar el $
+                            i=\$((i+1))
                         done
                         
                         # ESTA PAUSA ES CRÍTICA PARA EVITAR EL ERROR 2006
