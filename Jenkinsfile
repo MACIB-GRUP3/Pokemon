@@ -7,7 +7,7 @@ pipeline {
         SONAR_PROJECT_NAME = 'Pokemon PHP App'
         DOCKER_NETWORK = 'cicd-network'
     }
-    
+
     stages {
         stage('Checkout') {
             steps {
@@ -56,10 +56,8 @@ pipeline {
         stage('Deploy PHP App for DAST') {
             steps {
                 script {
-                    // Definimos la variable de entorno para el volumen
                     def hostWorkspace = env.WORKSPACE.replaceFirst("/var/jenkins_home", "/home/grupo03/cicd-setup/jenkins_home")
 
-                    // INICIO DEL BLOQUE SH (Comillas triples obligatorias)
                     sh """
                         echo "=== 0. Limpiando entorno anterior ==="
                         docker stop pokemon-db pokemon-php-app 2>/dev/null || true
@@ -70,6 +68,7 @@ pipeline {
                         grep -rl "localhost" . | xargs sed -i 's/localhost/pokemon-db/g' || true
 
                         echo "=== 2. Iniciando Base de Datos (MySQL) ==="
+                        # Se añade --max_allowed_packet para evitar desconexiones al importar
                         docker run -d \\
                             --name pokemon-db \\
                             --network cicd-network \\
@@ -80,6 +79,7 @@ pipeline {
 
                         echo "⏳ Esperando a que MySQL arranque..."
                         i=0
+                        # Importante: \$ escapado para que sea variable de Shell, no de Groovy
                         while [ \$i -lt 30 ]; do
                             if docker exec pokemon-db mysqladmin ping -h localhost --silent; then
                                 echo "✅ MySQL está vivo!"
@@ -90,13 +90,14 @@ pipeline {
                             i=\$((i+1))
                         done
 
+                        # Pausa CRÍTICA para que MySQL termine de inicializarse antes de recibir datos
                         echo "💤 Esperando 15s para asegurar estabilidad..."
                         sleep 15
 
                         echo "=== 3. Creando DB e Inyectando Datos ==="
                         docker exec pokemon-db mysql -uroot -e "CREATE DATABASE IF NOT EXISTS Pokewebapp;"
                         
-                        # Copiamos el archivo y lo importamos con 'source' para evitar errores de conexión
+                        # Usamos 'docker cp' y 'source' para evitar errores de tubería (Error 1317)
                         docker cp pokewebapp.sql pokemon-db:/tmp/pokewebapp.sql
                         docker exec pokemon-db mysql -uroot Pokewebapp -e "source /tmp/pokewebapp.sql"
 
@@ -153,42 +154,3 @@ pipeline {
                         echo "=== Análisis de Seguridad Específico ==="
                         echo "📌 Buscando SQL Injections..."
                         grep -rn "mysql_query\\|mysqli_query" . --include="*.php" | grep -v "prepare" || echo "✅ Limpio"
-                    '''
-                }
-            }
-        }
-
-        stage('Publish Reports') {
-            steps {
-                publishHTML([
-                    allowMissing: true,
-                    alwaysLinkToLastBuild: true,
-                    keepAll: true,
-                    reportDir: 'zap-reports',
-                    reportFiles: 'zap_report.html',
-                    reportName: 'OWASP ZAP Security Report',
-                    reportTitles: 'ZAP Security Scan'
-                ])
-                archiveArtifacts artifacts: 'zap-reports/**/*', allowEmptyArchive: true, fingerprint: true
-            }
-        }
-    }
-
-    post {
-        always {
-            script {
-                echo "=== Limpiando TODO ==="
-                sh '''
-                    docker stop pokemon-php-app pokemon-db zap-pokemon 2>/dev/null || true
-                    docker rm pokemon-php-app pokemon-db zap-pokemon 2>/dev/null || true
-                '''
-            }
-        }
-        success {
-            echo "✅ PIPELINE CORRECTO. La DB se conectó y ZAP pudo escanear."
-        }
-        failure {
-            echo "❌ FALLO. Revisa los logs."
-        }
-    }
-}
