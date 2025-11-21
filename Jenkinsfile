@@ -56,8 +56,10 @@ pipeline {
         stage('Deploy PHP App for DAST') {
             steps {
                 script {
+                    // Definimos la variable de entorno para el volumen
                     def hostWorkspace = env.WORKSPACE.replaceFirst("/var/jenkins_home", "/home/grupo03/cicd-setup/jenkins_home")
 
+                    // INICIO DEL BLOQUE SH (Comillas triples obligatorias)
                     sh """
                         echo "=== 0. Limpiando entorno anterior ==="
                         docker stop pokemon-db pokemon-php-app 2>/dev/null || true
@@ -68,34 +70,33 @@ pipeline {
                         grep -rl "localhost" . | xargs sed -i 's/localhost/pokemon-db/g' || true
 
                         echo "=== 2. Iniciando Base de Datos (MySQL) ==="
-                        docker run -d \
-                            --name pokemon-db \
-                            --network cicd-network \
-                            -e MYSQL_ROOT_PASSWORD= \
-                            -e MYSQL_ALLOW_EMPTY_PASSWORD=yes \
-                            mysql:5.7 \
+                        docker run -d \\
+                            --name pokemon-db \\
+                            --network cicd-network \\
+                            -e MYSQL_ROOT_PASSWORD= \\
+                            -e MYSQL_ALLOW_EMPTY_PASSWORD=yes \\
+                            mysql:5.7 \\
                             --max_allowed_packet=64M
 
                         echo "⏳ Esperando a que MySQL arranque..."
                         i=0
-                        while [ \$i -lt 30 ]; do   // <--- Asegúrate de escapar también aquí si usas """
+                        while [ \$i -lt 30 ]; do
                             if docker exec pokemon-db mysqladmin ping -h localhost --silent; then
                                 echo "✅ MySQL está vivo!"
                                 break
                             fi
                             echo "😴 Esperando socket... (\$i/30)"
                             sleep 2
-                            
-                            # CORRECCIÓN AQUÍ: Escapar el $
                             i=\$((i+1))
                         done
-                        
-                        # ESTA PAUSA ES CRÍTICA PARA EVITAR EL ERROR 2006
+
                         echo "💤 Esperando 15s para asegurar estabilidad..."
                         sleep 15
 
                         echo "=== 3. Creando DB e Inyectando Datos ==="
                         docker exec pokemon-db mysql -uroot -e "CREATE DATABASE IF NOT EXISTS Pokewebapp;"
+                        
+                        # Copiamos el archivo y lo importamos con 'source' para evitar errores de conexión
                         docker cp pokewebapp.sql pokemon-db:/tmp/pokewebapp.sql
                         docker exec pokemon-db mysql -uroot Pokewebapp -e "source /tmp/pokewebapp.sql"
 
