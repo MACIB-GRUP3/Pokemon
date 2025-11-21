@@ -83,17 +83,19 @@ pipeline {
                             mysql:5.7 \
                             --max_allowed_packet=64M
 
-                        echo "⏳ Esperando a que MySQL arranque..."
-                        
+                        echo "⏳Esperando a que MYSQL arranque..."
                         i=0
                         while [ \$i -lt 30 ]; do
-                         if docker exec pokemon-db mysqladmin ping -h localhost --silent; then
-                                echo "✅ MySQL está vivo!"
+                            if docker exec pokemon-db mysqladmin ping -h localhost --silent; then
+                                echo "✅ MySQL is alive!"
                                 break
                             fi
-                            echo "😴 Esperando socket... ($i/30)"
+                            echo "😴 Waiting for socket... (\$i/30)"
                             sleep 2
-                            i=$((i+1))
+                            
+                            # FIX HERE: Escape the $ sign
+                            i=\$((i+1))
+                        done
                         done
 
                         # AÑADIR ESTA ESPERA:
