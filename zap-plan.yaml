@@ -17,7 +17,7 @@ env:
         loggedOutRegex: "\\QSign up\\E"
         loggedInRegex: "\\QLogout\\E"
     users:
-      - name: "admin"   # <--- AQUI ESTABA EL ERROR (Faltaba sangría)
+      - name: "admin"
         credentials:
           username: "admin@stucom.com"
           password: "password123"
