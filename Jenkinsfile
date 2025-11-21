@@ -68,26 +68,27 @@ pipeline {
                         grep -rl "localhost" . | xargs sed -i 's/localhost/pokemon-db/g' || true
 
                         echo "=== 2. Iniciando Base de Datos (MySQL) ==="
-                        docker run -d \\
-                            --name pokemon-db \\
-                            --network cicd-network \\
-                            -e MYSQL_ROOT_PASSWORD= \\
-                            -e MYSQL_ALLOW_EMPTY_PASSWORD=yes \\
-                            mysql:5.7 \\
+                        docker run -d \
+                            --name pokemon-db \
+                            --network cicd-network \
+                            -e MYSQL_ROOT_PASSWORD= \
+                            -e MYSQL_ALLOW_EMPTY_PASSWORD=yes \
+                            mysql:5.7 \
                             --max_allowed_packet=64M
 
                         echo "⏳ Esperando a que MySQL arranque..."
                         i=0
-                        while [ \$i -lt 30 ]; do
+                        while [ $i -lt 30 ]; do
                             if docker exec pokemon-db mysqladmin ping -h localhost --silent; then
                                 echo "✅ MySQL está vivo!"
                                 break
                             fi
-                            echo "😴 Esperando socket... (\$i/30)"
+                            echo "😴 Esperando socket... ($i/30)"
                             sleep 2
-                            i=\$((i+1))
+                            i=$((i+1))
                         done
-
+                        
+                        # ESTA PAUSA ES CRÍTICA PARA EVITAR EL ERROR 2006
                         echo "💤 Esperando 15s para asegurar estabilidad..."
                         sleep 15
 
