@@ -16,11 +16,11 @@ env:
         method: "response"
         loggedOutRegex: "\\QSign up\\E"
         loggedInRegex: "\\QLogout\\E"
-users:
-    - name: "admin"
-      credentials:
-        username: "admin@stucom.com"
-        password: "password123"
+    users:
+      - name: "admin"   # <--- AQUI ESTABA EL ERROR (Faltaba sangría)
+        credentials:
+          username: "admin@stucom.com"
+          password: "password123"
     sessionManagement:
       method: "cookie"
   parameters:
