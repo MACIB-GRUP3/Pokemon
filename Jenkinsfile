@@ -7,13 +7,7 @@ pipeline {
         SONAR_PROJECT_NAME = 'Pokemon PHP App'
         DOCKER_NETWORK = 'cicd-network'
     }
-
-    triggers {
-        // CAMBIO PARA EL VÍDEO: Revisa cada minuto.
-        // Para la entrega final cámbialo a 'H/5 * * * *'
-        pollSCM('* * * * *') 
-    }
-
+    
     stages {
         stage('Checkout') {
             steps {
@@ -54,7 +48,6 @@ pipeline {
         stage('Quality Gate') {
             steps {
                 timeout(time: 5, unit: 'MINUTES') {
-                    // abortPipeline: false para que no se pare el vídeo si falla la calidad
                     waitForQualityGate abortPipeline: false 
                 }
             }
@@ -74,60 +67,51 @@ pipeline {
                         echo "=== 1. Parcheando conexión a DB ==="
                         grep -rl "localhost" . | xargs sed -i 's/localhost/pokemon-db/g' || true
 
-                       echo "=== 2. Iniciando Base de Datos (MySQL) ==="
-                        docker run -d \
-                            --name pokemon-db \
-                            --network cicd-network \
-                            -e MYSQL_ROOT_PASSWORD= \
-                            -e MYSQL_ALLOW_EMPTY_PASSWORD=yes \
-                            mysql:5.7 \
+                        echo "=== 2. Iniciando Base de Datos (MySQL) ==="
+                        docker run -d \\
+                            --name pokemon-db \\
+                            --network cicd-network \\
+                            -e MYSQL_ROOT_PASSWORD= \\
+                            -e MYSQL_ALLOW_EMPTY_PASSWORD=yes \\
+                            mysql:5.7 \\
                             --max_allowed_packet=64M
 
-                        echo "⏳Esperando a que MYSQL arranque..."
+                        echo "⏳ Esperando a que MySQL arranque..."
                         i=0
                         while [ \$i -lt 30 ]; do
                             if docker exec pokemon-db mysqladmin ping -h localhost --silent; then
-                                echo "✅ MySQL is alive!"
+                                echo "✅ MySQL está vivo!"
                                 break
                             fi
-                            echo "😴 Waiting for socket... (\$i/30)"
+                            echo "😴 Esperando socket... (\$i/30)"
                             sleep 2
-                            
-                            # FIX HERE: Escape the $ sign
                             i=\$((i+1))
                         done
-                        done
 
-                        # AÑADIR ESTA ESPERA:
                         echo "💤 Esperando 15s para asegurar estabilidad..."
                         sleep 15
 
-                       echo "=== 3. Creando DB e Inyectando Datos ==="
-                        
-                       # Crear la base de datos
-                       docker exec pokemon-db mysql -uroot -e "CREATE DATABASE IF NOT EXISTS Pokewebapp;"
+                        echo "=== 3. Creando DB e Inyectando Datos ==="
+                        docker exec pokemon-db mysql -uroot -e "CREATE DATABASE IF NOT EXISTS Pokewebapp;"
+                        docker cp pokewebapp.sql pokemon-db:/tmp/pokewebapp.sql
+                        docker exec pokemon-db mysql -uroot Pokewebapp -e "source /tmp/pokewebapp.sql"
 
-                       # Copiar el archivo SQL al contenedor
-                       docker cp pokewebapp.sql pokemon-db:/tmp/pokewebapp.sql
+                        echo "=== 4. Iniciando App PHP ==="
+                        docker run -d \\
+                            --name pokemon-php-app \\
+                            --network cicd-network \\
+                            -v ${hostWorkspace}:/var/www/html \\
+                            -w /var/www/html \\
+                            php:8.1-apache
 
-                       # CORRECCIÓN: Usar 'source' en lugar de redirección '<' para evitar el Error 1317
-                       docker exec pokemon-db mysql -uroot Pokewebapp -e "source /tmp/pokewebapp.sql"
-                       echo "=== 4. Iniciando App PHP ==="
-                       docker run -d \\
-                           --name pokemon-php-app \\
-                           --network cicd-network \\
-                           -v ${hostWorkspace}:/var/www/html \\
-                           -w /var/www/html \\
-                           php:8.1-apache
+                        echo "=== 5. Configurando Apache ==="
+                        sleep 5
+                        docker exec pokemon-php-app bash -c "docker-php-ext-install mysqli && docker-php-ext-enable mysqli && a2enmod rewrite headers && apache2ctl graceful"
 
-                       echo "=== 5. Configurando Apache ==="
-                       sleep 5
-                       docker exec pokemon-php-app bash -c "docker-php-ext-install mysqli && docker-php-ext-enable mysqli && a2enmod rewrite headers && apache2ctl graceful"
-
-                       echo "=== 6. Verificación Final ==="
-                       sleep 5
-                       docker run --rm --network cicd-network appropriate/curl -f -s http://pokemon-php-app:80 > /dev/null && echo "🚀 TODO LISTO" || echo "❌ ERROR: La web no responde"
-                      """
+                        echo "=== 6. Verificación Final ==="
+                        sleep 5
+                        docker run --rm --network cicd-network appropriate/curl -f -s http://pokemon-php-app:80 > /dev/null && echo "🚀 TODO LISTO" || echo "❌ ERROR: La web no responde"
+                    """
                 }
             }
         }
@@ -143,9 +127,8 @@ pipeline {
                         
                         mkdir -p ${WORKSPACE}/zap-reports
                         chmod -R 777 ${WORKSPACE}/zap-reports
-                        
+                       
                         echo "=== Ejecutando OWASP ZAP (Autenticado) ==="
-                        # Montamos el archivo zap-plan.yaml dentro del contenedor
                         docker run --name zap-pokemon \\
                             --network ${DOCKER_NETWORK} \\
                             -v ${hostWorkspace}/zap-reports:/zap/wrk:rw \\
@@ -164,8 +147,6 @@ pipeline {
                 script {
                     sh '''
                         echo "=== Análisis de Seguridad Específico ==="
-                        # Este grep fallará (exit 1) si encuentra vulnerabilidades, alertando en el log
-                        # Quitamos el '|| echo' para que veas el fallo si lo hay, o déjalo si quieres que pase siempre.
                         echo "📌 Buscando SQL Injections..."
                         grep -rn "mysql_query\\|mysqli_query" . --include="*.php" | grep -v "prepare" || echo "✅ Limpio"
                     '''
@@ -203,7 +184,7 @@ pipeline {
             echo "✅ PIPELINE CORRECTO. La DB se conectó y ZAP pudo escanear."
         }
         failure {
-            echo "❌ FALLO. Revisa si el contenedor mysql levantó bien."
+            echo "❌ FALLO. Revisa los logs."
         }
     }
 }
