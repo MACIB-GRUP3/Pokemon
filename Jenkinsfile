@@ -8,8 +8,6 @@ pipeline {
         DOCKER_NETWORK = 'cicd-network'
     }
 
-    // triggers { pollSCM('H/5 * * * *') } // Descomentar para ejecución automática
-
     stages {
         stage('Checkout') {
             steps {
@@ -70,7 +68,6 @@ pipeline {
                         grep -rl "localhost" . | xargs sed -i 's/localhost/pokemon-db/g' || true
 
                         echo "=== 2. Iniciando Base de Datos (MySQL) ==="
-                        # Aumentamos el tamaño del paquete para evitar cortes de conexión
                         docker run -d \\
                             --name pokemon-db \\
                             --network cicd-network \\
@@ -91,15 +88,11 @@ pipeline {
                             i=\$((i+1))
                         done
 
-                        # PAUSA OBLIGATORIA: Esperamos a que MySQL esté 100% listo para recibir datos
                         echo "💤 Esperando 15s para asegurar estabilidad..."
                         sleep 15
 
                         echo "=== 3. Creando DB e Inyectando Datos ==="
-                        # Creamos la base de datos vacía
                         docker exec pokemon-db mysql -uroot -e "CREATE DATABASE IF NOT EXISTS Pokewebapp;"
-                        
-                        # Copiamos el SQL dentro del contenedor y lo ejecutamos localmente (Evita error 1317)
                         docker cp pokewebapp.sql pokemon-db:/tmp/pokewebapp.sql
                         docker exec pokemon-db mysql -uroot Pokewebapp -e "source /tmp/pokewebapp.sql"
 
@@ -135,7 +128,7 @@ pipeline {
                         mkdir -p ${WORKSPACE}/zap-reports
                         chmod -R 777 ${WORKSPACE}/zap-reports
                        
-                        echo "=== Ejecutando OWASP ZAP (Autenticado como Admin) ==="
+                        echo "=== Ejecutando OWASP ZAP (Autenticado) ==="
                         docker run --name zap-pokemon \\
                             --network ${DOCKER_NETWORK} \\
                             -v ${hostWorkspace}/zap-reports:/zap/wrk:rw \\
@@ -188,10 +181,10 @@ pipeline {
             }
         }
         success {
-            echo "✅ PIPELINE CORRECTO. La DB se cargó y ZAP escaneó como Admin."
+            echo "✅ PIPELINE CORRECTO."
         }
         failure {
-            echo "❌ FALLO. Revisa los logs."
+            echo "❌ FALLO."
         }
     }
 }
