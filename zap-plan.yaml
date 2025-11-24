@@ -17,10 +17,10 @@ env:
         loggedOutRegex: "\\QSign up\\E"
         loggedInRegex: "\\QLogout\\E"
     users:
-      - name: "admin"
-        credentials:
-          username: "admin@stucom.com"
-          password: "password123"
+    - name: "admin"
+      credentials:
+        username: "admin@stucom.com"
+        password: "password123"
     sessionManagement:
       method: "cookie"
   parameters:
