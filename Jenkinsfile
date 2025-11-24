@@ -8,7 +8,7 @@ pipeline {
         DOCKER_NETWORK = 'cicd-network'
     }
 
-    // triggers { pollSCM('H/5 * * * *') } // Descomentar si quieres auto-arranque
+    // triggers { pollSCM('H/5 * * * *') } // Descomentar para ejecución automática
 
     stages {
         stage('Checkout') {
@@ -70,7 +70,7 @@ pipeline {
                         grep -rl "localhost" . | xargs sed -i 's/localhost/pokemon-db/g' || true
 
                         echo "=== 2. Iniciando Base de Datos (MySQL) ==="
-                        # Aumentamos max_allowed_packet para evitar caídas al importar el SQL
+                        # Aumentamos el tamaño del paquete para evitar cortes de conexión
                         docker run -d \\
                             --name pokemon-db \\
                             --network cicd-network \\
@@ -81,7 +81,6 @@ pipeline {
 
                         echo "⏳ Esperando a que MySQL arranque..."
                         i=0
-                        # Escapamos \$ para que sea variable de shell
                         while [ \$i -lt 30 ]; do
                             if docker exec pokemon-db mysqladmin ping -h localhost --silent; then
                                 echo "✅ MySQL está vivo!"
@@ -92,14 +91,15 @@ pipeline {
                             i=\$((i+1))
                         done
 
-                        # ESPERA CRÍTICA: Dar tiempo a MySQL para estabilizarse antes de cargar datos
+                        # PAUSA OBLIGATORIA: Esperamos a que MySQL esté 100% listo para recibir datos
                         echo "💤 Esperando 15s para asegurar estabilidad..."
                         sleep 15
 
                         echo "=== 3. Creando DB e Inyectando Datos ==="
+                        # Creamos la base de datos vacía
                         docker exec pokemon-db mysql -uroot -e "CREATE DATABASE IF NOT EXISTS Pokewebapp;"
                         
-                        # Copiamos y usamos 'source' para evitar errores de tubería
+                        # Copiamos el SQL dentro del contenedor y lo ejecutamos localmente (Evita error 1317)
                         docker cp pokewebapp.sql pokemon-db:/tmp/pokewebapp.sql
                         docker exec pokemon-db mysql -uroot Pokewebapp -e "source /tmp/pokewebapp.sql"
 
@@ -188,7 +188,7 @@ pipeline {
             }
         }
         success {
-            echo "✅ PIPELINE CORRECTO. Admin creado y escaneado."
+            echo "✅ PIPELINE CORRECTO. La DB se cargó y ZAP escaneó como Admin."
         }
         failure {
             echo "❌ FALLO. Revisa los logs."
