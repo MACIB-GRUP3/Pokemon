@@ -2,19 +2,22 @@ env:
   contexts:
   - name: "Pokemon Context"
     urls:
-    - "http://pokemon-php-app:80"
+    - "http://pokemon-php-app"      # CAMBIO: Quitamos :80
     includePaths:
-    - "http://pokemon-php-app:80.*"
-    excludePaths: []
+    - "http://pokemon-php-app.*"    # CAMBIO: Acepta cualquier cosa que empiece por el host
+    excludePaths:
+    - "http://pokemon-php-app.*/php/logout.php"
     authentication:
       method: "form"
       parameters:
-        loginPageUrl: "http://pokemon-php-app:80/signin.php"
-        loginRequestUrl: "http://pokemon-php-app:80/signin.php" 
+        loginPageUrl: "http://pokemon-php-app/signin.php"
+        loginRequestUrl: "http://pokemon-php-app/signin.php" 
         loginRequestBody: "email={%username%}&pwd={%password%}"
       verification:
-        method: "response"
-        # CORRECCIÓN CRÍTICA: Usamos el ID del formulario porque "Sign In" tiene HTML en medio
+        method: "poll"
+        pollUrl: "http://pokemon-php-app/main.php"
+        pollFrequency: 60
+        pollUnits: "requests"
         loggedOutRegex: "signin-form"
         loggedInRegex: "\\QLogout\\E"
     users:
