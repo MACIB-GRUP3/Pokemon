@@ -8,6 +8,12 @@ pipeline {
         DOCKER_NETWORK = 'cicd-network'
     }
 
+    // --- CONFIGURACIÓN MANUAL: Triggers comentados ---
+    // triggers {
+    //    pollSCM('H/5 * * * *') 
+    // }
+    // ------------------------------------------------
+
     stages {
         stage('Checkout') {
             steps {
@@ -79,7 +85,7 @@ pipeline {
 
                         echo "⏳ Esperando a que MySQL arranque..."
                         i=0
-                        # Importante: \$ escapado para que sea variable de Shell, no de Groovy
+                        # Importante: \$ escapado para que sea variable de Shell
                         while [ \$i -lt 30 ]; do
                             if docker exec pokemon-db mysqladmin ping -h localhost --silent; then
                                 echo "✅ MySQL está vivo!"
@@ -90,14 +96,14 @@ pipeline {
                             i=\$((i+1))
                         done
 
-                        # Pausa CRÍTICA para que MySQL termine de inicializarse antes de recibir datos
+                        # Pausa CRÍTICA para que MySQL termine de inicializarse
                         echo "💤 Esperando 15s para asegurar estabilidad..."
                         sleep 15
 
                         echo "=== 3. Creando DB e Inyectando Datos ==="
                         docker exec pokemon-db mysql -uroot -e "CREATE DATABASE IF NOT EXISTS Pokewebapp;"
                         
-                        # Usamos 'docker cp' y 'source' para evitar errores de tubería (Error 1317)
+                        # Usamos 'docker cp' y 'source' para evitar errores de tubería
                         docker cp pokewebapp.sql pokemon-db:/tmp/pokewebapp.sql
                         docker exec pokemon-db mysql -uroot Pokewebapp -e "source /tmp/pokewebapp.sql"
 
@@ -154,3 +160,42 @@ pipeline {
                         echo "=== Análisis de Seguridad Específico ==="
                         echo "📌 Buscando SQL Injections..."
                         grep -rn "mysql_query\\|mysqli_query" . --include="*.php" | grep -v "prepare" || echo "✅ Limpio"
+                    '''
+                }
+            }
+        }
+
+        stage('Publish Reports') {
+            steps {
+                publishHTML([
+                    allowMissing: true,
+                    alwaysLinkToLastBuild: true,
+                    keepAll: true,
+                    reportDir: 'zap-reports',
+                    reportFiles: 'zap_report.html',
+                    reportName: 'OWASP ZAP Security Report',
+                    reportTitles: 'ZAP Security Scan'
+                ])
+                archiveArtifacts artifacts: 'zap-reports/**/*', allowEmptyArchive: true, fingerprint: true
+            }
+        }
+    }
+
+    post {
+        always {
+            script {
+                echo "=== Limpiando TODO ==="
+                sh '''
+                    docker stop pokemon-php-app pokemon-db zap-pokemon 2>/dev/null || true
+                    docker rm pokemon-php-app pokemon-db zap-pokemon 2>/dev/null || true
+                '''
+            }
+        }
+        success {
+            echo "✅ PIPELINE CORRECTO. La DB se conectó y ZAP pudo escanear."
+        }
+        failure {
+            echo "❌ FALLO. Revisa los logs para ver el error."
+        }
+    }
+}
