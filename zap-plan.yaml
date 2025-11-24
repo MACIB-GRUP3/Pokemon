@@ -14,8 +14,8 @@ env:
         loginRequestBody: "email={%username%}&pwd={%password%}"
       verification:
         method: "response"
-        # CORRECCIÓN: Cambiado "Sign up" por "Sign In" para que coincida con el título de signin.php
-        loggedOutRegex: "\\QSign In\\E"
+        # CORRECCIÓN CRÍTICA: Usamos el ID del formulario porque "Sign In" tiene HTML en medio
+        loggedOutRegex: "signin-form"
         loggedInRegex: "\\QLogout\\E"
     users:
     - name: "admin"
