@@ -8,11 +8,7 @@ pipeline {
         DOCKER_NETWORK = 'cicd-network'
     }
 
-    // --- CONFIGURACIÓN MANUAL: Triggers comentados ---
-    // triggers {
-    //    pollSCM('H/5 * * * *') 
-    // }
-    // ------------------------------------------------
+    // triggers { pollSCM('H/5 * * * *') } // Descomentar si quieres auto-arranque
 
     stages {
         stage('Checkout') {
@@ -74,7 +70,7 @@ pipeline {
                         grep -rl "localhost" . | xargs sed -i 's/localhost/pokemon-db/g' || true
 
                         echo "=== 2. Iniciando Base de Datos (MySQL) ==="
-                        # Se añade --max_allowed_packet para evitar desconexiones al importar
+                        # Aumentamos max_allowed_packet para evitar caídas al importar el SQL
                         docker run -d \\
                             --name pokemon-db \\
                             --network cicd-network \\
@@ -85,7 +81,7 @@ pipeline {
 
                         echo "⏳ Esperando a que MySQL arranque..."
                         i=0
-                        # Importante: \$ escapado para que sea variable de Shell
+                        # Escapamos \$ para que sea variable de shell
                         while [ \$i -lt 30 ]; do
                             if docker exec pokemon-db mysqladmin ping -h localhost --silent; then
                                 echo "✅ MySQL está vivo!"
@@ -96,14 +92,14 @@ pipeline {
                             i=\$((i+1))
                         done
 
-                        # Pausa CRÍTICA para que MySQL termine de inicializarse
+                        # ESPERA CRÍTICA: Dar tiempo a MySQL para estabilizarse antes de cargar datos
                         echo "💤 Esperando 15s para asegurar estabilidad..."
                         sleep 15
 
                         echo "=== 3. Creando DB e Inyectando Datos ==="
                         docker exec pokemon-db mysql -uroot -e "CREATE DATABASE IF NOT EXISTS Pokewebapp;"
                         
-                        # Usamos 'docker cp' y 'source' para evitar errores de tubería
+                        # Copiamos y usamos 'source' para evitar errores de tubería
                         docker cp pokewebapp.sql pokemon-db:/tmp/pokewebapp.sql
                         docker exec pokemon-db mysql -uroot Pokewebapp -e "source /tmp/pokewebapp.sql"
 
@@ -139,7 +135,7 @@ pipeline {
                         mkdir -p ${WORKSPACE}/zap-reports
                         chmod -R 777 ${WORKSPACE}/zap-reports
                        
-                        echo "=== Ejecutando OWASP ZAP (Autenticado) ==="
+                        echo "=== Ejecutando OWASP ZAP (Autenticado como Admin) ==="
                         docker run --name zap-pokemon \\
                             --network ${DOCKER_NETWORK} \\
                             -v ${hostWorkspace}/zap-reports:/zap/wrk:rw \\
@@ -192,10 +188,10 @@ pipeline {
             }
         }
         success {
-            echo "✅ PIPELINE CORRECTO. La DB se conectó y ZAP pudo escanear."
+            echo "✅ PIPELINE CORRECTO. Admin creado y escaneado."
         }
         failure {
-            echo "❌ FALLO. Revisa los logs para ver el error."
+            echo "❌ FALLO. Revisa los logs."
         }
     }
 }
