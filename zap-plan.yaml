@@ -2,9 +2,14 @@ env:
   contexts:
   - name: "Pokemon Context"
     urls:
-    - "http://pokemon-php-app"      # CAMBIO: Quitamos :80
+    # 1. Añadimos explícitamente las páginas internas para que el Spider las vea
+    - "http://pokemon-php-app"
+    - "http://pokemon-php-app/main.php"
+    - "http://pokemon-php-app/profile.php"
+    - "http://pokemon-php-app/social.php"
+    - "http://pokemon-php-app/trainerView.php"
     includePaths:
-    - "http://pokemon-php-app.*"    # CAMBIO: Acepta cualquier cosa que empiece por el host
+    - "http://pokemon-php-app.*"
     excludePaths:
     - "http://pokemon-php-app.*/php/logout.php"
     authentication:
@@ -35,7 +40,9 @@ jobs:
 - type: "spider"
   parameters:
     user: "admin"
-    maxDuration: 1
+    maxDuration: 2 # Aumentamos un poco el tiempo por si acaso
+    parseComments: true
+    handleODataParametersVisited: true
 - type: "passiveScan-wait"
   parameters:
     maxDuration: 0
