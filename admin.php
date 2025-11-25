@@ -12,16 +12,18 @@ if (isset($_POST['email'])) {
   $email = $_POST['email'];
 
   // CÓDIGO VULNERABLE
+  /*
   $query = "SELECT nombre,correo,pokeballs FROM usuario WHERE correo = '$email'";
   $result = mysqli_query($link, $query);
-
+  */
+  
   // CÓDIGO SEGURO
-  /*
+  
   $stmt = $link->prepare("SELECT nombre,correo,pokeballs FROM usuario WHERE correo = ?");
   $stmt->bind_param("s", $email);
   $stmt->execute();
   $result = $stmt->get_result();
-  */ 
+  
 
   if (!$result) {
     echo mysqli_error($link);
