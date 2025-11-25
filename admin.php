@@ -18,7 +18,6 @@ if (isset($_POST['email'])) {
   */
   
   // CÓDIGO SEGURO
-  
   $stmt = $link->prepare("SELECT nombre,correo,pokeballs FROM usuario WHERE correo = ?");
   $stmt->bind_param("s", $email);
   $stmt->execute();
