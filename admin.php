@@ -21,7 +21,7 @@ if (isset($_POST['email'])) {
   $stmt->bind_param("s", $email);
   $stmt->execute();
   $result = $stmt->get_result();
-  */
+  */ 
 
   if (!$result) {
     echo mysqli_error($link);
