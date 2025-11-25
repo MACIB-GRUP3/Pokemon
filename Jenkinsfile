@@ -96,18 +96,21 @@ pipeline {
                         docker cp pokewebapp.sql pokemon-db:/tmp/pokewebapp.sql
                         docker exec pokemon-db mysql -uroot Pokewebapp -e "source /tmp/pokewebapp.sql"
 
-                        echo "=== 4. Iniciando App PHP ==="
-                        docker run -d \\
-                            --name pokemon-php-app \\
-                            --network cicd-network \\
-                            -v ${hostWorkspace}:/var/www/html \\
-                            -w /var/www/html \\
-                            php:8.1-apache
+                        echo "=== 4. Construyendo e Iniciando App PHP Segura ==="
+                        // 1. Construimos la imagen usando TU Dockerfile (que copia el .htaccess)
+                        docker build -t pokemon-secure-app .
+
+                        // 2. Arrancamos la app usando TU imagen segura
+                        docker run -d \
+                            --name pokemon-php-app \
+                            --network cicd-network \
+                            -v ${hostWorkspace}:/var/www/html \
+                            -w /var/www/html \
+                            pokemon-secure-app
 
                         echo "=== 5. Configurando Apache ==="
                         sleep 5
-                        docker exec pokemon-php-app bash -c "docker-php-ext-install mysqli && docker-php-ext-enable mysqli && a2enmod rewrite headers && apache2ctl graceful"
-
+                        docker exec pokemon-php-app bash -c "sed -i 's/AllowOverride None/AllowOverride All/' /etc/apache2/apache2.conf && docker-php-ext-install mysqli && docker-php-ext-enable mysqli && a2enmod rewrite headers && apache2ctl graceful"
                         echo "=== 6. Verificación Final ==="
                         sleep 5
                         docker run --rm --network cicd-network appropriate/curl -f -s http://pokemon-php-app:80 > /dev/null && echo "🚀 TODO LISTO" || echo "❌ ERROR: La web no responde"
